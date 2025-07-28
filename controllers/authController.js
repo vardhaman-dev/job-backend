@@ -12,10 +12,11 @@ const otpStore = {};
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'kavishtoraskar@gmail.com', // Your Gmail address
-    pass:  // Your App Password 
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
+
 
 // Verify SMTP configuration
 transporter.verify((error, success) => {
@@ -49,7 +50,7 @@ exports.registerUser = async (req, res) => {
 
     // Send OTP email
     const mailOptions = {
-      from: 'kavishtoraskar@gmail.com',
+      from: process.env.EMAIL_USER,
       to: email,
       subject: 'JobHub OTP Verification',
       html: `<p>Your OTP is <strong>${otp}</strong>. It expires in 5 minutes.</p>`,
