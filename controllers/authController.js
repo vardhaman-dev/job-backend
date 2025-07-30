@@ -31,7 +31,7 @@ exports.registerUser = async (req, res) => {
     return res.status(400).json({ success: false, errors: errors.array() });
   }
 
-  const { firstName, lastName, email, password, subscribe } = req.body;
+  const { Name, email, password, subscribe } = req.body;
 
   try {
     // Check if email already exists
@@ -91,10 +91,9 @@ exports.verifyUserOtp = async (req, res) => {
     const hashed = await bcrypt.hash(record.userData.password, 10);
 
     await db.execute(
-      "INSERT INTO users (first_name, last_name, email, password) VALUES (?, ?, ?, ?)",
+      "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?, ?)",
       [
-        record.userData.firstName,
-        record.userData.lastName,
+        record.userData.Name,
         record.userData.email,
         hashed,
       ]

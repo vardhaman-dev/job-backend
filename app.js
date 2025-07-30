@@ -5,7 +5,7 @@ const helmet = require("helmet");
 require("dotenv").config();
 
 const authRoutes = require("./routes/auth");
-
+const searchRefRoute = require("./routes/searchRef");
 const app = express();
 
 app.use(cors());
@@ -16,7 +16,9 @@ app.use("/api/auth", authRoutes);
 
 app.get("/", (_, res) => res.send("Job Portal API Running"));
 
-const PORT = process.env.PORT || 5000;
+app.use(searchRefRoute); // add this below auth route
+
+const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
