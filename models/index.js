@@ -1,17 +1,10 @@
 const { sequelize } = require('../config/database');
 const User = require('./User');
 const CompanyProfile = require('./CompanyProfile');
+const CompanyVerification = require('./CompanyVerification');
 const JobSeekerProfile = require('./JobSeekerProfile');
 const Job = require('./Job');
-
 const AdminLog = require('./AdminLog');
-const JobApplication = require('./JobApplication')(sequelize);
-// JobApplication associations
-Job.hasMany(JobApplication, { foreignKey: 'job_id', as: 'applications' });
-JobApplication.belongsTo(Job, { foreignKey: 'job_id', as: 'job' });
-
-User.hasMany(JobApplication, { foreignKey: 'job_seeker_id', as: 'jobApplications' });
-JobApplication.belongsTo(User, { foreignKey: 'job_seeker_id', as: 'jobSeeker' });
 
  
 // Define associations
@@ -53,13 +46,55 @@ AdminLog.belongsTo(User, {
   as: 'admin'
 });
 
+// Company to CompanyVerification (One-to-Many)
+User.hasMany(CompanyVerification, {
+  foreignKey: 'companyId',
+  as: 'verifications',
+  onDelete: 'CASCADE'
+});
 
+CompanyVerification.belongsTo(User, {
+  foreignKey: 'companyId',
+  as: 'company'
+});
+
+// Admin to CompanyVerification (One-to-Many)
+User.hasMany(CompanyVerification, {
+  foreignKey: 'verifiedBy',
+  as: 'verifiedCompanies'
+});
+
+CompanyVerification.belongsTo(User, {
+  foreignKey: 'verifiedBy',
+  as: 'verifiedByAdmin'
+});
+
+// Company to Jobs (One-to-Many)
+User.hasMany(Job, {
+  foreignKey: 'company_id',
+  as: 'jobs',
+  onDelete: 'CASCADE'
+});
+
+Job.belongsTo(User, {
+  foreignKey: 'company_id',
+  as: 'company'
+});
+
+// Job to CompanyProfile (Many-to-One through User)
+Job.belongsTo(CompanyProfile, {
+  foreignKey: 'company_id',
+  targetKey: 'userId',
+  as: 'companyProfile'
+});
+
+// Export models and sequelize instance
 module.exports = {
   sequelize,
   User,
   CompanyProfile,
+  CompanyVerification,
   JobSeekerProfile,
   Job,
   AdminLog,
-  JobApplication
 };
