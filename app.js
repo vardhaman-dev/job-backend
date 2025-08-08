@@ -11,6 +11,8 @@ const userRoutes = require('./routes/users');
 const suggestRoutes = require('./routes/suggest');
 const jobSearchRoutes = require('./routes/jobRoutes'); 
 const applicationRoutes = require('./routes/application');
+const profileRoutes = require('./routes/profile');
+const bookmarkRoutes = require('./routes/bookmark'); 
 // Create Express app
 const app = express();
 
@@ -25,6 +27,7 @@ app.use('/api/users', userRoutes);
 app.use('/api', suggestRoutes);
 app.use('/api/jobs', jobSearchRoutes);
 app.use('/api', applicationRoutes);
+app.use('/api/bookmarks', bookmarkRoutes)
 app.use('/api/admin', require('./routes/admin'));
 // Health check endpoint
 app.get('/', (_, res) => res.status(200).json({ status: 'ok', message: 'Job Portal API is running' }));
@@ -38,6 +41,8 @@ app.use((err, req, res, next) => {
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
+
+app.use('/api', profileRoutes);
 
 // 404 handler
 app.use((req, res) => {

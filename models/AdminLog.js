@@ -9,40 +9,57 @@ const AdminLog = sequelize.define('AdminLog', {
   },
   adminId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,  // Nullable for unauthenticated actions
     references: {
-      model: 'users',  // Reference the users table
+      model: 'users',
       key: 'id',
     },
     field: 'admin_id'
   },
   action: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING,  // Changed from ENUM to STRING for more flexibility
     allowNull: false,
-    comment: 'e.g., login_attempt, login_success, login_failed'
+    comment: 'Type of admin action performed'
   },
   ipAddress: {
     type: DataTypes.STRING,
-    field: 'ip_address'
+    allowNull: true,
+    field: 'ip_address',
+    comment: 'IP address from which the action was performed'
   },
   userAgent: {
     type: DataTypes.TEXT,
-    field: 'user_agent'
+    allowNull: true,
+    field: 'user_agent',
+    comment: 'Browser/device information'
   },
   status: {
     type: DataTypes.ENUM('success', 'failed'),
-    allowNull: false
+    allowNull: false,
+    comment: 'Whether the action was successful or not'
   },
   details: {
     type: DataTypes.TEXT,
+    allowNull: true,
     comment: 'Additional details or error message'
-  }
+  },
+  // Timestamps are automatically added by the model options below
 }, {
   tableName: 'admin_logs',
-  timestamps: true,
-  underscored: true,
+  timestamps: true,  // Adds createdAt and updatedAt
+  underscored: true,  // Uses snake_case for column names
   createdAt: 'created_at',
-  updatedAt: 'updated_at'
+  updatedAt: 'updated_at',
+  indexes: [
+    {
+      fields: ['admin_id'],
+      name: 'idx_admin_logs_admin_id'
+    },
+    {
+      fields: ['created_at'],
+      name: 'idx_admin_logs_created_at'
+    }
+  ]
 });
 
 module.exports = AdminLog;

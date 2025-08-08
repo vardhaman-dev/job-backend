@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const { User, CompanyProfile, sequelize } = require('../models');
+const { User, CompanyProfile, CompanyVerification, sequelize } = require('../models');
 const BaseAuthController = require('./baseAuthController');
 
 class CompanyAuthController extends BaseAuthController {
@@ -68,8 +68,8 @@ class CompanyAuthController extends BaseAuthController {
           : `@${twitterHandle}`
         : null;
 
-      // Create company profile with all fields
-      await CompanyProfile.create({
+      // Create company profile with verification status
+      const companyProfile = await CompanyProfile.create({
         userId: user.id,
         companyName,
         contactNumber,
@@ -81,19 +81,40 @@ class CompanyAuthController extends BaseAuthController {
         companySize,
         foundedYear: foundedYear ? parseInt(foundedYear, 10) : null,
         linkedinUrl,
-        twitterHandle: formattedTwitterHandle
+        twitterHandle: formattedTwitterHandle,
+        status: 'pending',
+        submittedAt: new Date()
+      }, { transaction });
+
+      // Create initial verification record
+      await CompanyVerification.create({
+        companyId: user.id,
+        status: 'pending',
+        submittedAt: new Date()
       }, { transaction });
 
       // Commit the transaction
       await transaction.commit();
 
-      // Get the user with profile for response
+      // Get the user with profile and verification status for response
       const userWithProfile = await User.findByPk(user.id, {
-        include: [{
-          model: CompanyProfile,
-          as: 'companyProfile',
-          attributes: { exclude: ['userId', 'createdAt', 'updatedAt'] }
-        }],
+        include: [
+          {
+            model: CompanyProfile,
+            as: 'companyProfile',
+            attributes: { 
+              exclude: ['userId', 'createdAt', 'updatedAt'],
+              include: ['status', 'submittedAt', 'verifiedAt']
+            }
+          },
+          {
+            model: CompanyVerification,
+            as: 'verifications',
+            limit: 1,
+            order: [['submittedAt', 'DESC']],
+            attributes: ['status', 'submittedAt', 'verifiedAt', 'rejectionReason']
+          }
+        ],
         attributes: { exclude: ['password_hash', 'createdAt', 'updatedAt'] }
       });
 

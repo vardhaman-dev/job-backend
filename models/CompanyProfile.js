@@ -1,4 +1,4 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes, ENUM } = require('sequelize');
 const { sequelize } = require('../config/database');
 
 // Define the CompanyProfile model
@@ -46,10 +46,54 @@ const CompanyProfile = sequelize.define('CompanyProfile', {
     allowNull: true,
     field: 'location',
   },
+  status: {
+    type: ENUM('pending', 'approved', 'rejected'),
+    allowNull: false,
+    defaultValue: 'pending',
+  },
+  submittedAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+    field: 'submitted_at',
+  },
+  verifiedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'verified_at',
+  },
+  verifiedBy: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'verified_by',
+    comment: 'users.id of approving admin',
+  },
+  rejectionReason: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'rejection_reason',
+  },
+  linkedinUrl: {
+    type: DataTypes.STRING(512),
+    allowNull: true,
+    field: 'linkedin_url',
+    validate: {
+      isUrl: true,
+    },
+  },
 }, {
   tableName: 'company_profiles',
   timestamps: false, // Disable timestamps since they don't exist in the database
   underscored: true,
 });
+
+// Add associations
+CompanyProfile.associate = (models) => {
+  CompanyProfile.hasMany(models.CompanyVerification, {
+    foreignKey: 'companyId',
+    sourceKey: 'userId',
+    as: 'verifications'
+  });
+};
 
 module.exports = CompanyProfile;

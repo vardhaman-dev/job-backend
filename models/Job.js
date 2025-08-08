@@ -36,15 +36,31 @@ const Job = sequelize.define('Job', {
     allowNull: false,
     defaultValue: DataTypes.NOW
   },
+  deadline: {
+    type: DataTypes.DATEONLY,
+    allowNull: true
+  },
+  benefits: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  education: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  submitted_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   skills: {
-    type: DataTypes.TEXT,
+    type: DataTypes.JSON,
     allowNull: true
   },
   tags: {
-    type: DataTypes.TEXT,
+    type: DataTypes.JSON,
     allowNull: true
   },
-  category: {                           // ✅ Add this
+  category: {
     type: DataTypes.STRING,
     allowNull: true
   }
