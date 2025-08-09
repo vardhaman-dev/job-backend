@@ -85,9 +85,18 @@ router.get("/suggest/:userId", async (req, res) => {
     }
 
     if (!Array.isArray(userSkills) || userSkills.length === 0) {
-      if (DEBUG) console.log("⚠️ User has no skills listed");
-      return res.status(400).json({ error: "User has no skills listed" });
+  if (DEBUG) console.log("⚠️ User has no skills listed — showing latest jobs");
+
+  const latestJobs = await sequelize.query(
+    "SELECT id, title, location FROM jobs WHERE status = 'open' ORDER BY created_at DESC LIMIT 5",
+    {
+      type: sequelize.QueryTypes.SELECT,
     }
+  );
+
+  return res.json(latestJobs);
+}
+
 
     if (DEBUG) console.log("✅ Parsed user skills:", userSkills);
 
