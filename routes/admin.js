@@ -5,6 +5,8 @@ const { isLoggedIn, isAdmin } = require('../middleware/authMiddleware');
 const { User } = require('../models');
 const jwt = require('jsonwebtoken');
 const jwtConfig = require('../config/jwt');
+const companyVerificationController = require('../controllers/admin/companyVerificationController');
+const { body, param } = require('express-validator');
 
 /**
  * @swagger
@@ -194,5 +196,209 @@ router.get('/dashboard', (req, res) => {
     }
   });
 });
+
+/**
+ * @swagger
+ * /api/admin/companies/pending:
+ *   get:
+ *     summary: Get list of pending company verifications
+ *     tags: [Admin - Company Verification]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of pending companies
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/CompanyProfile'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ */
+router.get('/companies/pending', isLoggedIn, isAdmin, companyVerificationController.getPendingCompanies);
+
+/**
+ * @swagger
+ * /api/admin/companies/{companyId}/approve:
+ *   post:
+ *     summary: Approve a company verification
+ *     tags: [Admin - Company Verification]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: companyId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID of the company to approve
+ *     responses:
+ *       200:
+ *         description: Company approved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Company not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/companies/:companyId/approve', 
+  isLoggedIn, 
+  isAdmin,
+  [
+    param('companyId').isInt().withMessage('Company ID must be an integer')
+  ],
+  companyVerificationController.approveCompany
+);
+
+/**
+ * @swagger
+ * /api/admin/companies/{companyId}/reject:
+ *   post:
+ *     summary: Reject a company verification
+ *     tags: [Admin - Company Verification]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: companyId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID of the company to reject
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reason
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for rejection
+ *     responses:
+ *       200:
+ *         description: Company rejected successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Missing or invalid rejection reason
+ *       404:
+ *         description: Company not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/companies/:companyId/reject', 
+  isLoggedIn, 
+  isAdmin,
+  [
+    param('companyId').isInt().withMessage('Company ID must be an integer'),
+    body('reason').notEmpty().withMessage('Rejection reason is required')
+  ],
+  companyVerificationController.rejectCompany
+);
+
+/**
+ * @swagger
+ * /api/admin/companies/{companyId}/verification-history:
+ *   get:
+ *     summary: Get verification history for a company
+ *     tags: [Admin - Company Verification]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: companyId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID of the company
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: Verification history retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/CompanyVerification'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ */
+router.get('/companies/:companyId/verification-history', 
+  isLoggedIn, 
+  isAdmin,
+  [
+    param('companyId').isInt().withMessage('Company ID must be an integer')
+  ],
+  companyVerificationController.getVerificationHistory
+);
 
 module.exports = router;

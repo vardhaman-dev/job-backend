@@ -1,6 +1,8 @@
 const express = require('express');
-const { login: unifiedLogin } = require('../controllers/unifiedAuthController');
+const { body } = require('express-validator');
+const { login: unifiedLogin, register } = require('../controllers/unifiedAuthController');
 const { loginValidator } = require('../validations/authValidators');
+const verifyToken = require('../middleware/verifyToken');
 
 // Import job seeker auth
 const jobSeekerAuthController = require('../controllers/jobSeekerAuthController');
@@ -9,6 +11,8 @@ const { registerJobSeekerValidator } = require('../validations/jobSeekerValidato
 // Import company auth
 const companyAuthController = require('../controllers/companyAuthController');
 const { registerCompanyValidator } = require('../validations/companyValidators');
+
+const { User } = require('../models');
 
 const router = express.Router();
 
@@ -23,6 +27,22 @@ router.post('/job-seeker/login', loginValidator, jobSeekerAuthController.loginJo
 router.post('/company/register', registerCompanyValidator, companyAuthController.registerCompany);
 router.post('/company/login', loginValidator, companyAuthController.loginCompany);
 
+//Get authenticated user
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['id', 'name', 'email', 'role'],
+    });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.json({ user });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Health check endpoint
 router.get('/health', (req, res) => {
   res.status(200).json({ 
@@ -32,5 +52,35 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+router.post(
+  '/signup',
+  [
+    body('firstName').notEmpty().trim().withMessage('First name is required'),
+    body('lastName').notEmpty().trim().withMessage('Last name is required'),
+    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  ],
+  register
+);
+
+
+// router.post(
+//   '/verify-otp',
+//   [
+//     body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+//   ],
+//   verifyUserOtp
+// );
+
+
+// router.post(
+//   '/login',
+//   [
+//     body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+//     body('password').notEmpty().withMessage('Password is required'),
+//   ],
+//   loginUser
+// );
 
 module.exports = router;

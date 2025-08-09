@@ -180,5 +180,6 @@ unifiedAuthController.sequelize = sequelize; // Add sequelize instance to the co
 const login = (req, res) => unifiedAuthController.login(req, res);
 
 module.exports = {
-  login
+  login,
+  register: (req, res) => unifiedAuthController.register(req, res)
 };

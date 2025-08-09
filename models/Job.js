@@ -36,28 +36,31 @@ const Job = sequelize.define('Job', {
     allowNull: false,
     defaultValue: DataTypes.NOW
   },
-   deadline: {
-    type: DataTypes.DATE,
+  deadline: {
+    type: DataTypes.DATEONLY,
     allowNull: true
   },
   benefits: {
-    type: DataTypes.STRING,  // varchar(255) → string in Sequelize
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  education: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  submitted_at: {
+    type: DataTypes.DATE,
     allowNull: true
   },
   skills: {
-  type: DataTypes.JSON,
-  allowNull: true,
-
-},
-education: {
-  type: DataTypes.STRING,
-  allowNull: true
-},
-tags: {
-  type: DataTypes.JSON,
-  allowNull: true,
-},
-  category: {                           // ✅ Add this
+    type: DataTypes.JSON,
+    allowNull: true
+  },
+  tags: {
+    type: DataTypes.JSON,
+    allowNull: true
+  },
+  category: {
     type: DataTypes.STRING,
     allowNull: true
   }
@@ -65,13 +68,6 @@ tags: {
   tableName: 'jobs',
   timestamps: false
 });
-
-Job.associate = (models) => {
-  Job.hasMany(models.Bookmark, {
-    foreignKey: 'job_id',
-    as: 'bookmarks'
-  });
-};
 
 
 module.exports = Job;
