@@ -1,6 +1,6 @@
 import { sequelize } from '../models/index.js';
 import { Op, fn, col, literal } from 'sequelize';
-import { User, UserExperience,JobSeekerProfile, CompanyProfile } from '../models/index.js';
+import { User, UserExperience, JobSeekerProfile, CompanyProfile } from '../models/index.js';
 
 // Helper: calculate total experience in years
 const experienceYearsLiteral = sequelize.fn(
@@ -14,12 +14,36 @@ export const getSuggestions = async (req, res) => {
 
     // Fetch company profile
     const company = await CompanyProfile.findOne({ where: { userId: companyId } });
-
     if (!company) return res.status(404).json({ error: 'Company not found' });
 
     let positions = company.positionsAvailable;
 
-    if (!positions) return res.json([]);
+    // Helper function to get experienced users
+    const getExperiencedUsers = async (minExperience = 1, limit = 10) => {
+      return await User.findAll({
+        include: [{
+          model: JobSeekerProfile,
+          as: 'jobSeekerProfile',
+          where: {
+            experience_years: { [Op.gte]: minExperience }
+          }
+        }],
+        attributes: ['id', 'name'],
+        order: [['jobSeekerProfile', 'experience_years', 'DESC']],
+        limit
+      });
+    };
+
+    if (!positions) {
+      // No positions at all - show latest users with good experience
+      const latestUsers = await getExperiencedUsers(1, 10);
+
+      return res.json({
+        success: true,
+        message: 'No positions found — showing experienced job seekers',
+        jobseekers: latestUsers
+      });
+    }
 
     if (typeof positions === 'string') {
       try {
@@ -33,35 +57,56 @@ export const getSuggestions = async (req, res) => {
       return res.status(400).json({ error: 'Invalid company_positions format' });
     }
 
-    // Query users with matching desired_position and sum experience
-   const jobseekers = await User.findAll({
-  include: [{
-    model: JobSeekerProfile,
-    as: 'jobSeekerProfile',
-    where: {
-      title: positions, // positions is array of titles from company_positions JSON
-    },
-    include: [{
-      model: UserExperience,
-      as: 'experience',
-      attributes: [],
-    }],
-  }],
-  attributes: [
-    'id',
-    'name',
-    [sequelize.fn('SUM', sequelize.literal("TIMESTAMPDIFF(MONTH, `jobSeekerProfile->experience`.`start_date`, IFNULL(`jobSeekerProfile->experience`.`end_date`, CURDATE())) / 12")), 'totalExperienceYears']
-  ],
-  group: ['User.id', 'jobSeekerProfile.title'],
-  order: [[sequelize.literal('totalExperienceYears'), 'DESC']],
-});
+    // If positions array is empty, show latest users with good experience
+    if (positions.length === 0) {
+      const latestUsers = await getExperiencedUsers(1, 10);
 
+      return res.json({
+        success: true,
+        message: 'No specific positions available — showing experienced job seekers',
+        jobseekers: latestUsers
+      });
+    }
+
+    // Query users with matching positions
+    const jobseekers = await User.findAll({
+      include: [{
+        model: JobSeekerProfile,
+        as: 'jobSeekerProfile',
+        where: { title: positions }, // positions is array of titles
+        include: [{
+          model: UserExperience,
+          as: 'experience',
+          attributes: []
+        }]
+      }],
+      attributes: [
+        'id',
+        'name',
+        [experienceYearsLiteral, 'totalExperienceYears']
+      ],
+      group: ['User.id', 'jobSeekerProfile.title'],
+      order: [[sequelize.literal('totalExperienceYears'), 'DESC']]
+    });
+
+    // If no matching candidates found, show latest users with good experience as fallback
+    if (jobseekers.length === 0) {
+      const fallbackUsers = await getExperiencedUsers(2, 10);
+
+      return res.json({
+        success: true,
+        message: `No candidates found for positions: ${positions.join(', ')} — showing experienced job seekers`,
+        positions,
+        jobseekers: fallbackUsers
+      });
+    }
 
     res.json({
       success: true,
       positions,
       jobseekers
     });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
