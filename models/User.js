@@ -68,7 +68,13 @@ const User = sequelize.define('User', {
       },
     },
   },
-}, {
+  lastLogin: { // New field
+    type: DataTypes.DATE,
+    allowNull: true,
+    defaultValue: null,
+  },
+},
+{
   tableName: 'users',
   timestamps: false, // Disable timestamps to match database schema
   underscored: true,
