@@ -1,4 +1,4 @@
-const { Job } = require('../models');
+const { Job, CompanyProfile } = require('../models');
 const { Op } = require('sequelize');
 
 function normalizeText(text) {
@@ -9,14 +9,41 @@ function normalizeText(text) {
 async function searchJobsByQuery(query) {
   const normalizedQuery = normalizeText(query);
 
-  const jobs = await Job.findAll({
-    attributes: ['id', 'title', 'tags', 'location']
+  // Fetch jobs that match the company name
+  const jobsByCompany = await Job.findAll({
+    attributes: ['id', 'title', 'tags', 'location', 'skills', 'salary_range', 'type', 'posted_at','experience_min'],
+    where: { status: 'open' },
+    include: [
+      {
+        model: CompanyProfile,
+        as: 'company', // must match association alias
+        attributes: ['companyName'],
+        where: {
+          companyName: {
+            [Op.like]: `%${query}%` // MySQL-friendly
+          }
+        },
+        required: true
+      }
+    ]
+  });
+
+  // Fetch all jobs for title/tag matching
+  const allJobs = await Job.findAll({
+    attributes: ['id', 'title', 'tags', 'location', 'skills', 'salary_range', 'type', 'posted_at', 'experience_min'],
+    include: [
+      {
+        model: CompanyProfile,
+        as: 'company',
+        attributes: ['companyName']
+      }
+    ]
   });
 
   const titleMatches = [];
   const tagMatches = [];
 
-  for (const job of jobs) {
+  for (const job of allJobs) {
     const title = normalizeText(job.title || '');
     let tags = [];
 
@@ -33,7 +60,18 @@ async function searchJobsByQuery(query) {
     }
   }
 
-  return [...titleMatches, ...tagMatches];
+  // Merge results: company matches first, then title/tag matches
+  const seen = new Set();
+  const mergedResults = [];
+
+  for (const job of [...jobsByCompany, ...titleMatches, ...tagMatches]) {
+    if (!seen.has(job.id)) {
+      seen.add(job.id);
+      mergedResults.push(job);
+    }
+  }
+
+  return mergedResults; // same raw Sequelize objects as original
 }
 
 module.exports = {

@@ -79,8 +79,12 @@ const JobSeekerProfile = sequelize.define('JobSeekerProfile', {
     type: DataTypes.STRING(512),
     allowNull: true,
     field: 'photo_url'
-  }
-
+  },
+  title: {
+  type: DataTypes.STRING(255),
+  allowNull: true,
+  field: 'title',  // Use the exact DB column name
+},
 }, {
   tableName: 'job_seeker_profiles',
   timestamps: false,

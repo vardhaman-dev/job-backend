@@ -73,7 +73,7 @@ router.post('/jobs', async (req, res) => {
   const {
   title, description, location, type, salary,
   deadline, skills, status, company_id, tags,
-  benefits, education        
+  benefits, education ,experience     
 } = req.body;
 
   // Assign category
@@ -86,6 +86,7 @@ router.post('/jobs', async (req, res) => {
   description,
   location,
   type,
+ experience_min: experience ? Number(experience) : 0,
   salary_range: salary,
   deadline,                 // ✅
   benefits,

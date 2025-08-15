@@ -60,6 +60,10 @@ tags: {
   category: {                           // ✅ Add this
     type: DataTypes.STRING,
     allowNull: true
+  },
+  experience_min: {
+    type: DataTypes.INTEGER, // e.g., '1-3 years', '5+ years'
+    allowNull: true
   }
 }, {
   tableName: 'jobs',

@@ -1,7 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 
-// Define the CompanyProfile model
 const CompanyProfile = sequelize.define('CompanyProfile', {
   userId: {
     type: DataTypes.INTEGER,
@@ -27,7 +26,6 @@ const CompanyProfile = sequelize.define('CompanyProfile', {
   logo: {
     type: DataTypes.STRING(512),
     allowNull: true,
-    field: 'logo',
   },
   website: {
     type: DataTypes.STRING(512),
@@ -44,11 +42,21 @@ const CompanyProfile = sequelize.define('CompanyProfile', {
   location: {
     type: DataTypes.STRING(255),
     allowNull: true,
-    field: 'location',
+  },
+ positionsAvailable: {
+  type: DataTypes.JSON,
+  allowNull: true,
+  field: 'positions_available',
+},
+
+  numberOfEmployees: { // NEW FIELD
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'number_of_employees',
   },
 }, {
   tableName: 'company_profiles',
-  timestamps: false, // Disable timestamps since they don't exist in the database
+  timestamps: false,
   underscored: true,
 });
 

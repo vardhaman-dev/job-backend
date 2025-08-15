@@ -88,7 +88,16 @@ Job.belongsTo(User, {
   foreignKey: 'company_id',
   as: 'companyUser'
 });
+User.hasMany(UserExperience, {
+  foreignKey: 'user_id',
+  as: 'experiences',
+  onDelete: 'CASCADE',
+});
 
+UserExperience.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user',
+});
 
 
 module.exports = {

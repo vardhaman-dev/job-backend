@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+require('./jobsCron'); // path to your cron file
 
 // Ensure uploads/resumes directory exists
 const uploadDir = path.join(__dirname, 'uploads/resumes');
@@ -21,7 +22,11 @@ const suggestRoutes = require('./routes/suggest');
 const jobSearchRoutes = require('./routes/jobRoutes'); 
 const applicationRoutes = require('./routes/application');
 const profileRoutes = require('./routes/profile');
-const bookmarkRoutes = require('./routes/bookmark'); 
+const bookmarkRoutes = require('./routes/bookmark');
+const passwordRoutes = require('./routes/passwordRoutes');
+const companyRoutes = require('./routes/companyRoutes');
+const jobseekerRoutes = require('./routes/jobseeker.routes');
+
 
 // Create Express app
 const app = express();
@@ -42,7 +47,9 @@ app.use('/api/jobs', jobSearchRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/bookmarks', bookmarkRoutes);
 app.use('/api/admin', require('./routes/admin'));
-
+app.use('/api/password', passwordRoutes); 
+app.use('/api', companyRoutes);
+app.use('/api/jobseeker', jobseekerRoutes);
 // Health check endpoint
 app.get('/', (_, res) => res.status(200).json({ status: 'ok', message: 'Job Portal API is running' }));
 
