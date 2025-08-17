@@ -14,6 +14,8 @@ if (!fs.existsSync(uploadDir)) {
   console.log('Created uploads/resumes directory');
 }
 
+
+
 // Import database connection and models
 const { sequelize } = require('./models');
 const authRoutes = require('./routes/auth');
@@ -32,7 +34,10 @@ const jobseekerRoutes = require('./routes/jobseeker.routes');
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:9000', // your frontend URL
+  credentials: true
+}))
 app.use(helmet());
 app.use(express.json());
 

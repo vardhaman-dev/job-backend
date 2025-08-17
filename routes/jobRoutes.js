@@ -179,4 +179,73 @@ router.get('/jobs/:id', async (req, res) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+router.get('/jobs/company/:companyId', async (req, res) => {
+  const { companyId } = req.params;
+
+  try {
+    const jobs = await Job.findAll({
+      where: { company_id: companyId },
+      order: [
+        // Open jobs first, then closed
+        ['status', 'ASC'],
+        ['deadline', 'ASC'] // Optional: earliest deadline first
+      ]
+    });
+
+    res.json({ success: true, jobs });
+  } catch (err) {
+    console.error('Error fetching jobs:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ------------------ Edit Job by ID ------------------
+router.put('/jobs/:jobId', async (req, res) => {
+  const { jobId } = req.params;
+  const {
+    title, description, location, type, salary,
+    deadline, skills, status, tags, benefits, education, experience
+  } = req.body;
+
+  try {
+    const job = await Job.findByPk(jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+
+    const category = assignCategory(tags || JSON.parse(job.tags || '[]'));
+
+    await job.update({
+      title: title || job.title,
+      description: description || job.description,
+      location: location || job.location,
+      type: type || job.type,
+      experience_min: experience !== undefined ? Number(experience) : job.experience_min,
+      salary_range: salary || job.salary_range,
+      deadline: deadline || job.deadline,
+      benefits: benefits || job.benefits,
+      education: education || job.education,
+      status: status || job.status,
+      skills: skills ? JSON.stringify(skills) : job.skills,
+      tags: tags ? JSON.stringify(tags) : job.tags,
+      category
+    });
+
+    res.json({ success: true, job });
+  } catch (err) {
+    console.error('Error updating job:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+router.delete('/jobs/:jobId', async (req, res) => {
+  const { jobId } = req.params;
+  try {
+    const job = await Job.findByPk(jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+    
+    await job.destroy();
+    res.json({ success: true, message: 'Job deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
