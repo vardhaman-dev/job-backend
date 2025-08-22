@@ -91,16 +91,7 @@ const CATEGORIES_TAGS = {
 };
 
 const CATEGORY_SKILLS = {
-  "Information Technology": [
-    "JavaScript", "React", "Node.js", "Python", "SQL", "Git", "Docker", "AWS", "Azure",
-    "GCP", "Kubernetes", "CI/CD", "DevOps", "Cybersecurity", "Java", "C++", "C#", "Go",
-    "PHP", "Ruby on Rails", "Swift", "Kotlin", "TypeScript", "Vue.js", "Angular", "MongoDB",
-    "PostgreSQL", "System Administration", "Network Security", "Cloud Architecture", "Data Science",
-    "Machine Learning", "AI Development", "Blockchain", "IoT", "Frontend Development",
-    "Backend Development", "Full Stack Development", "Mobile App Development", "UI/UX Design",
-    "Agile Methodologies", "Scrum", "RESTful APIs", "Microservices", "Data Warehousing",
-    "Big Data Analytics", "Linux", "Windows Server", "Technical Support"
-  ],
+  
   "Marketing & Sales": [
     "SEO", "Content Writing", "Email Marketing", "CRM", "Campaign Management", "PPC",
     "SEM", "Social Media Marketing", "Market Research", "Copywriting", "Salesforce",
@@ -109,6 +100,16 @@ const CATEGORY_SKILLS = {
     "Negotiation", "Customer Relationship Management", "Sales Funnel Management",
     "Data Analysis & Reporting", "A/B Testing", "Conversion Rate Optimization (CRO)",
     "Product Marketing", "Affiliate Marketing", "Influencer Marketing"
+  ],
+"Information Technology": [
+    "JavaScript", "React", "Node.js", "Python", "SQL", "Git", "Docker", "AWS", "Azure",
+    "GCP", "Kubernetes", "CI/CD", "DevOps", "Cybersecurity", "Java", "C++", "C#", "Go",
+    "PHP", "Ruby on Rails", "Swift", "Kotlin", "TypeScript", "Vue.js", "Angular", "MongoDB",
+    "PostgreSQL", "System Administration", "Network Security", "Cloud Architecture", "Data Science",
+    "Machine Learning", "AI Development", "Blockchain", "IoT", "Frontend Development",
+    "Backend Development", "Full Stack Development", "Mobile App Development", "UI/UX Design",
+    "Agile Methodologies", "Scrum", "RESTful APIs", "Microservices", "Data Warehousing",
+    "Big Data Analytics", "Linux", "Windows Server", "Technical Support"
   ],
   "Finance & Accounting": [
     "Accounting", "Audit", "Excel", "Financial Analysis", "Tax Planning", "GAAP", "IFRS",
@@ -260,8 +261,9 @@ router.get("/suggest/:userId", async (req, res) => {
    FROM jobs j
    LEFT JOIN company_profiles c ON j.company_id = c.user_id
    WHERE j.status = 'open'
+     AND c.status = 'approved' 
    LIMIT 100`,
-    { type: sequelize.QueryTypes.SELECT }
+  { type: sequelize.QueryTypes.SELECT }
   );
 
   const suggestions = latestJobs.map(job => ({
@@ -365,11 +367,12 @@ router.get("/skills/:userId", async (req, res) => {
     );
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
-
+     
     let userSkills = [];
     try { userSkills = JSON.parse(user.skills_json || "[]"); } 
     catch { userSkills = []; }
-
+    console.log("User skills:", userSkills);
+    console.log("User title:", user.title);
     const category = getCategoryFromTitle(user.title);
     const missingSkills = getMissingSkills(userSkills, category);
 

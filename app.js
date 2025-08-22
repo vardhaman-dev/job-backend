@@ -28,15 +28,14 @@ const bookmarkRoutes = require('./routes/bookmark');
 const passwordRoutes = require('./routes/passwordRoutes');
 const companyRoutes = require('./routes/companyRoutes');
 const jobseekerRoutes = require('./routes/jobseeker.routes');
-
-
+const emailRoutes = require("./routes/emailRoutes");
+const notificationsRouter = require('./routes/notificationRoutes');
 // Create Express app
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:9000', // your frontend URL
-  credentials: true
+
 }))
 app.use(helmet());
 app.use(express.json());
@@ -55,6 +54,8 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/password', passwordRoutes); 
 app.use('/api', companyRoutes);
 app.use('/api/jobseeker', jobseekerRoutes);
+app.use("/api/emails", emailRoutes);
+app.use('/api/notifications', notificationsRouter); 
 // Health check endpoint
 app.get('/', (_, res) => res.status(200).json({ status: 'ok', message: 'Job Portal API is running' }));
 

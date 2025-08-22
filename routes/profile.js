@@ -63,6 +63,38 @@ router.get('/profile/:userId', async (req, res) => {
   }
 });
 
+router.get('/profile/:userId/public', async (req, res) => { 
+  const { userId } = req.params;
+   try { 
+    const user = await User.findByPk(userId, {
+       attributes: ['name', 'email'] // no email here 
+       }); 
+       const profile = await JobSeekerProfile.findOne({ 
+        where: { userId },
+         include: [ { model: UserEducation, as: 'education' },
+           { model: UserExperience, as: 'experience' } 
+          ]
+         });
+          if (!user || !profile)
+             {
+               return res.status(404).json({ error: 'User profile not found' });
+               } 
+      res.json({
+         name: user.name,
+         email: user.email||null,
+         photo: profile.photoUrl || null,
+         resume: profile.resumeLink || '',
+         phoneNumber: profile.phoneNumber || '',
+         experienceYears: profile.experienceYears || 0, 
+         summary: profile.summary || '',
+         skills: profile.skillsJson || [], 
+         education: profile.education || [], 
+         experience: profile.experience || [], 
+         title: profile.title || '', 
+        });
+       } catch (error)
+        { console.error(error);
+           res.status(500).json({ error: 'Internal server error' }); } });
 // UPDATE full profile
 router.put('/profile/:userId', async (req, res) => {
   const { userId } = req.params;

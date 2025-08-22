@@ -9,6 +9,12 @@ const AdminLog = require('./AdminLog');
 const JobApplication = require('./JobApplication')(sequelize);
 const UserEducation = require('./UserEducation');
 const UserExperience = require('./UserExperience');
+const Notification = require("./Notification")(sequelize, DataTypes); // <-- add this
+
+// associations
+User.hasMany(Notification, { foreignKey: "user_id", as: "notifications" });
+Notification.belongsTo(User, { foreignKey: "user_id", as: "user" });
+
 
 // JobApplication associations
 Job.hasMany(JobApplication, { foreignKey: 'job_id', as: 'applications' });
@@ -110,6 +116,7 @@ module.exports = {
   AdminLog,
   JobApplication,
   UserEducation,
-  UserExperience
+  UserExperience,
+    Notification,
 };
 

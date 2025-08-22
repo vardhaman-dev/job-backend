@@ -1,4 +1,4 @@
-const { JobApplication, Job } = require('../models');
+const { JobApplication, Job,User,JobSeekerProfile } = require('../models');
 const path = require('path');
 
 // Apply to a job
@@ -62,5 +62,32 @@ exports.getMyApplications = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Failed to fetch applications' });
+  }
+};
+exports.getCompanyCandidates = async (req, res) => {
+  try {
+    const company_id = req.params.companyId;  // <-- take from URL
+
+    const applications = await JobApplication.findAll({
+      include: [
+        {
+          model: Job,
+          as: 'job',
+          where: { company_id },    // filter by company id
+          attributes: ['id', 'title']
+        },
+        {
+          model: User,
+          as: 'jobSeeker',
+          attributes: ['id', 'name', 'email']
+        }
+      ],
+      attributes: ['id', 'cover_letter', 'resume_link', 'status', 'applied_at']
+    });
+
+    res.json({ success: true, applications });
+  } catch (err) {
+    console.error('Error fetching company candidates:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch company candidates' });
   }
 };

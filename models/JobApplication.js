@@ -36,5 +36,12 @@ status: {
     tableName: 'applications',
     timestamps: false,
   });
+
+  JobApplication.associate = (models) => {
+    // Optional: convenience link to notes via (job_id, user_id) pattern
+    // No direct FK here; we'll query by where clause
+    JobApplication.belongsTo(models.Job, { foreignKey: "job_id", as: "job" });
+    JobApplication.belongsTo(models.User, { foreignKey: "job_seeker_id", as: "applicant" });
+  };
   return JobApplication;
 };

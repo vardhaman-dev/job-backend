@@ -3,7 +3,7 @@ const router = express.Router();
 const { Job } = require('../models');
 const { fn, col, literal } = require('sequelize');
 const CompanyProfile = require('../models/CompanyProfile');
-const { searchJobsByQuery } = require('../controllers/jobSearchService');
+const { searchJobsByQuery,searchByLocation } = require('../controllers/jobSearchService');
 
 
 const CATEGORIES_TAGS = {
@@ -273,4 +273,5 @@ router.get('/jobs/trends/:companyId', async (req, res) => {
   }
 });
 
+router.get("/location", searchByLocation);
 module.exports = router;
