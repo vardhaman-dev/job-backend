@@ -1,100 +1,61 @@
 const { sequelize } = require('../config/database');
-const User = require('./User');
-const CompanyProfile = require('./CompanyProfile');
-const CompanyVerification = require('./CompanyVerification');
-const JobSeekerProfile = require('./JobSeekerProfile');
-const Job = require('./Job');
-const AdminLog = require('./AdminLog');
+const { DataTypes } = require('sequelize');
 
- 
+// Initialize models
+const User = require('./User')(sequelize, DataTypes);
+const CompanyProfile = require('./CompanyProfile')(sequelize, DataTypes);
+const JobSeekerProfile = require('./JobSeekerProfile')(sequelize, DataTypes);
+const Job = require('./Job')(sequelize, DataTypes);
+const Bookmark = require('./Bookmark')(sequelize, DataTypes);
+const AdminLog = require('./AdminLog')(sequelize, DataTypes);
+const JobApplication = require('./JobApplication')(sequelize, DataTypes);
+const UserEducation = require('./UserEducation')(sequelize, DataTypes);
+const UserExperience = require('./UserExperience')(sequelize, DataTypes);
+
 // Define associations
-// User to CompanyProfile (One-to-One)
-User.hasOne(CompanyProfile, {
-  foreignKey: 'userId',
-  as: 'companyProfile',
-  onDelete: 'CASCADE',
-  hooks: true
-});
+Job.hasMany(JobApplication, { foreignKey: 'job_id', as: 'applications' });
+JobApplication.belongsTo(Job, { foreignKey: 'job_id', as: 'job' });
 
-CompanyProfile.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user'
-});
+User.hasMany(JobApplication, { foreignKey: 'job_seeker_id', as: 'jobApplications' });
+JobApplication.belongsTo(User, { foreignKey: 'job_seeker_id', as: 'jobSeeker' });
 
-// User to JobSeekerProfile (One-to-One)
-User.hasOne(JobSeekerProfile, {
-  foreignKey: 'userId',
-  as: 'jobSeekerProfile',
-  onDelete: 'CASCADE',
-  hooks: true
-});
+User.hasOne(CompanyProfile, { foreignKey: 'userId', as: 'companyProfile', onDelete: 'CASCADE', hooks: true });
+CompanyProfile.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
-JobSeekerProfile.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user'
-});
+User.hasOne(JobSeekerProfile, { foreignKey: 'userId', as: 'jobSeekerProfile', onDelete: 'CASCADE', hooks: true });
+JobSeekerProfile.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
-// Set up associations for AdminLog (One-to-Many)
-User.hasMany(AdminLog, {
-  foreignKey: 'adminId',
-  as: 'adminLogs',
-  onDelete: 'CASCADE'
-});
+JobSeekerProfile.hasMany(UserEducation, { foreignKey: 'user_id', as: 'education', onDelete: 'CASCADE' });
+UserEducation.belongsTo(JobSeekerProfile, { foreignKey: 'user_id', as: 'jobSeeker' });
 
-AdminLog.belongsTo(User, {
-  foreignKey: 'adminId',
-  as: 'admin'
-});
+JobSeekerProfile.hasMany(UserExperience, { foreignKey: 'user_id', as: 'experience', onDelete: 'CASCADE' });
+UserExperience.belongsTo(JobSeekerProfile, { foreignKey: 'user_id', as: 'jobSeeker' });
 
-// Company to CompanyVerification (One-to-Many)
-User.hasMany(CompanyVerification, {
-  foreignKey: 'companyId',
-  as: 'verifications',
-  onDelete: 'CASCADE'
-});
+User.hasMany(AdminLog, { foreignKey: 'adminId', as: 'adminLogs', onDelete: 'CASCADE' });
+AdminLog.belongsTo(User, { foreignKey: 'adminId', as: 'admin' });
 
-CompanyVerification.belongsTo(User, {
-  foreignKey: 'companyId',
-  as: 'company'
-});
+Bookmark.belongsTo(Job, { foreignKey: 'job_id', as: 'job' });
 
-// Admin to CompanyVerification (One-to-Many)
-User.hasMany(CompanyVerification, {
-  foreignKey: 'verifiedBy',
-  as: 'verifiedCompanies'
-});
+Job.belongsTo(User, { foreignKey: 'company_id', as: 'companyUser' });
 
-CompanyVerification.belongsTo(User, {
-  foreignKey: 'verifiedBy',
-  as: 'verifiedByAdmin'
-});
+Job.belongsTo(CompanyProfile, { foreignKey: 'company_id', targetKey: 'userId', as: 'company' });
+CompanyProfile.hasMany(Job, { foreignKey: 'company_id', sourceKey: 'userId', as: 'jobs' });
 
-// Company to Jobs (One-to-Many)
-User.hasMany(Job, {
-  foreignKey: 'company_id',
-  as: 'jobs',
-  onDelete: 'CASCADE'
-});
-
-Job.belongsTo(User, {
-  foreignKey: 'company_id',
-  as: 'company'
-});
-
-// Job to CompanyProfile (Many-to-One through User)
-Job.belongsTo(CompanyProfile, {
-  foreignKey: 'company_id',
-  targetKey: 'userId',
-  as: 'companyProfile'
-});
-
-// Export models and sequelize instance
 module.exports = {
   sequelize,
   User,
   CompanyProfile,
-  CompanyVerification,
   JobSeekerProfile,
   Job,
+  Bookmark,
   AdminLog,
+  JobApplication,
+  UserEducation,
+  UserExperience
 };
+
+// Test connection
+sequelize
+  .authenticate()
+  .then(() => console.log('✅ Database connection successful'))
+  .catch((err) => console.error('Database connection failed:', err));

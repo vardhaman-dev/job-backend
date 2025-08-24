@@ -1,4 +1,5 @@
 // authController.js
+const { User } = require('../models');
 const db = require('../db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -132,7 +133,6 @@ exports.verifyUserOtp = async (req, res) => {
   }
 };
 
-// Login User
 exports.loginUser = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -142,12 +142,14 @@ exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-    if (rows.length === 0) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
-    }
+    // Find user using Sequelize
+    const user = await User.scope('withPassword').findOne({
+      where: { email: email.toLowerCase().trim() }
+    });
 
-    const user = rows[0];
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid email or password' });
+    }
 
     if (!user.password_hash) {
       return res.status(400).json({
@@ -158,19 +160,24 @@ exports.loginUser = async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({ success: false, message: 'Invalid email or password' });
     }
 
     // Update lastLogin
-    await db.execute('UPDATE users SET lastLogin = ? WHERE id = ?', [new Date(), user.id]);
+    await user.update({ lastLogin: new Date() });
 
-    const isNewUser = user.lastLogin === null; // If lastLogin was null, this is the first login
+    const isNewUser = user.lastLogin === null;
 
     const payload = {
       userId: user.id,
       role: user.role || 'job_seeker',
       name: user.name,
     };
+
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not defined');
+      return res.status(500).json({ success: false, message: 'Server configuration error' });
+    }
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES_IN || '2d',
@@ -185,12 +192,22 @@ exports.loginUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role || 'job_seeker',
-        isNewUser, // Include isNewUser flag
+        isNewUser,
       },
     });
   } catch (err) {
-    console.error('Login error:', err.message, err.stack);
-    return res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Login error:', {
+      message: err.message,
+      stack: err.stack,
+      email,
+      code: err.code, // Sequelize error code
+      sql: err.sql || 'N/A', // SQL if available
+    });
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during login',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    });
   }
 };
 
