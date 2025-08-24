@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Job } = require('../models');
+const { fn, col, literal } = require('sequelize');
 const CompanyProfile = require('../models/CompanyProfile');
 const { searchJobsByQuery } = require('../controllers/jobSearchService');
 
@@ -245,6 +246,30 @@ router.delete('/jobs/:jobId', async (req, res) => {
     res.json({ success: true, message: 'Job deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Trends: last 7 posting dates for a company with counts
+router.get('/jobs/trends/:companyId', async (req, res) => {
+  const { companyId } = req.params;
+  try {
+    const rows = await Job.findAll({
+      where: { company_id: companyId },
+      attributes: [
+        [fn('DATE', col('posted_at')), 'date'],
+        [fn('COUNT', col('id')), 'count']
+      ],
+      group: [literal('DATE(posted_at)')],
+      order: [[literal('DATE(posted_at)'), 'DESC']],
+      limit: 7,
+      raw: true
+    });
+
+    const data = rows.map(r => ({ date: r.date, count: Number(r.count) }));
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('Error fetching trends:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
