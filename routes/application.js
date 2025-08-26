@@ -5,112 +5,287 @@ const path = require('path');
 const { isLoggedIn } = require('../middleware/authMiddleware');
 const { applyJobValidator } = require('../validations/applicationValidators');
 const { validate } = require('../middleware/validationMiddleware');
-const { applyToJob, getMyApplications } = require('../controllers/jobApplicationController');
-const { getCompanyCandidates } = require('../controllers/jobApplicationController');
-const { JobApplication, Job, User } = require('../models'); 
-const { createNotification } = require('../utils/notificationService');
+const { 
+  applyToJob, 
+  getMyApplications, 
+  getCompanyCandidates,
+  updateApplicationStatus
+} = require('../controllers/jobApplicationController');
 
-// adjust path according to where your models/index.js is
-
-const app = require('../app');
-// Add logging wrappers around middleware to detect hangs
-const logMiddleware = (name, fn) => (req, res, next) => {
-  console.log(`[Middleware] ${name} start`);
-  return fn(req, res, (...args) => {
-    console.log(`[Middleware] ${name} end`);
-    next(...args);
-  });
+// Add logging wrapper around middleware to detect hangs
+const logMiddleware = (name, middleware) => {
+  return async (req, res, next) => {
+    console.log(`[Middleware] ${name} start`);
+    try {
+      if (typeof middleware === 'function') {
+        const result = middleware(req, res, (error) => {
+          if (error) {
+            console.log(`[Middleware] ${name} error:`, error.message);
+            return next(error);
+          }
+          console.log(`[Middleware] ${name} end`);
+          next();
+        });
+        
+        // Handle async middleware
+        if (result && typeof result.then === 'function') {
+          await result;
+        }
+      } else {
+        console.log(`[Middleware] ${name} end`);
+        next();
+      }
+    } catch (error) {
+      console.log(`[Middleware] ${name} error:`, error.message);
+      next(error);
+    }
+  };
 };
 
-// Setup multer storage and file filter
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/resumes/');  // make sure this folder exists
+// Error handling middleware for multer
+const handleMulterError = (error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    switch (error.code) {
+      case 'LIMIT_FILE_SIZE':
+        return res.status(400).json({
+          success: false,
+          message: 'File too large. Maximum size allowed is 5MB.'
+        });
+      case 'LIMIT_FILE_COUNT':
+        return res.status(400).json({
+          success: false,
+          message: 'Too many files. Maximum 2 files allowed.'
+        });
+      case 'LIMIT_UNEXPECTED_FILE':
+        return res.status(400).json({
+          success: false,
+          message: 'Unexpected file field. Only "resume" and "coverLetter" fields are allowed.'
+        });
+      default:
+        return res.status(400).json({
+          success: false,
+          message: `Upload error: ${error.message}`
+        });
+    }
+  }
+  
+  if (error.message && (
+    error.message.includes('Invalid file type') || 
+    error.message.includes('Only PDF, DOC, DOCX')
+  )) {
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+  
+  next(error);
+};
+
+// Configure multer for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 2 // Maximum 2 files
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Only PDF, DOC, DOCX, and TXT files are allowed.`), false);
+    }
   }
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = /pdf|doc|docx/;
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.test(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only PDF, DOC and DOCX files are allowed'));
-  }
-};
-
-const upload = multer({ storage, fileFilter });
-
-router.post(
-  '/apply',
+// Apply to job route
+router.post('/apply',
   logMiddleware('isLoggedIn', isLoggedIn),
-
-  // Multer middleware before validation to parse multipart/form-data
-  logMiddleware('upload.single', upload.single('resume')),
-
-  // Validation runs after multer populates req.body
-  logMiddleware('applyJobValidator', (req, res, next) => {
-    Promise.all(applyJobValidator.map((v) => v.run(req)))
-      .then(() => {
-        console.log('[Middleware] applyJobValidator end');
-        next();
-      })
-      .catch(next);
+  logMiddleware('upload.fields', upload.fields([
+    { name: 'resume', maxCount: 1 },
+    { name: 'coverLetter', maxCount: 1 }
+  ])),
+  handleMulterError,
+  logMiddleware('validation', async (req, res, next) => {
+    try {
+      if (applyJobValidator && Array.isArray(applyJobValidator)) {
+        await Promise.all(applyJobValidator.map(v => v.run(req)));
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
   }),
-
   logMiddleware('validate', validate([])),
-
-  applyToJob
+  logMiddleware('applyToJob', applyToJob)
 );
 
-// Get my applications
+// Get user's job applications
 router.get('/my-applications', isLoggedIn, getMyApplications);
 
+// Get company candidates (for employers)
+router.get('/company-candidates/:companyId',
+  // Note: You might want to add authentication for employers here
+  logMiddleware('getCompanyCandidates', getCompanyCandidates)
+);
 
-router.get('/company-candidates/:companyId', getCompanyCandidates);
-// PUT /applications/:applicationId/status
-router.put('/:applicationId/status', async (req, res) => {
-  try {
-    const { status } = req.body;
-    const id = parseInt(req.params.applicationId, 10);
+// Update application status
+router.put('/:applicationId/status',
+  // Note: You might want to add authentication for employers here
+  logMiddleware('updateApplicationStatus', updateApplicationStatus)
+);
 
-    if (isNaN(id)) {
-      return res.status(400).json({ error: 'Invalid application ID' });
+// Get specific application details
+router.get('/applications/:id',
+  logMiddleware('isLoggedIn', isLoggedIn),
+  async (req, res) => {
+    try {
+      const { JobApplication, Job } = require('../models');
+      const applicationId = parseInt(req.params.id);
+
+      if (isNaN(applicationId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid application ID format'
+        });
+      }
+
+      const application = await JobApplication.findOne({
+        where: { 
+          id: applicationId,
+          job_seeker_id: req.user.id 
+        },
+        include: [{
+          model: Job,
+          as: 'job',
+          attributes: ['id', 'title', 'company', 'location', 'type', 'description', 'salary_range']
+        }]
+      });
+
+      if (!application) {
+        return res.status(404).json({
+          success: false,
+          message: 'Application not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        application
+      });
+    } catch (error) {
+      console.error('Error fetching application:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch application'
+      });
     }
-
-    const application = await JobApplication.findByPk(id, {
-      include: [
-        { model: Job, as: 'job' },
-        { model: User, as: 'jobSeeker' }
-      ]
-    });
-
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Update status
-    application.status = status;
-    await application.save();
-
-    // 🔔 Create notification for the candidate
-    if (status === "rejected") {
-      await createNotification(application.jobSeeker.id, "Unfortunately, your application was rejected.");
-    } else if (status === "approved") {
-      await createNotification(application.jobSeeker.id, "Congratulations! You’ve been shortlisted!");
-    }
-
-    res.json({ success: true, status: application.status });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error updating status', details: err.message });
   }
-});
+);
 
+// Withdraw application
+router.patch('/applications/:id/withdraw',
+  logMiddleware('isLoggedIn', isLoggedIn),
+  async (req, res) => {
+    try {
+      const { JobApplication } = require('../models');
+      const applicationId = parseInt(req.params.id);
+
+      if (isNaN(applicationId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid application ID format'
+        });
+      }
+
+      const application = await JobApplication.findOne({
+        where: { 
+          id: applicationId,
+          job_seeker_id: req.user.id,
+          status: ['applied', 'under_review'] // Can only withdraw these statuses
+        }
+      });
+
+      if (!application) {
+        return res.status(404).json({
+          success: false,
+          message: 'Application not found or cannot be withdrawn'
+        });
+      }
+
+      await application.update({ status: 'withdrawn' });
+
+      res.json({
+        success: true,
+        message: 'Application withdrawn successfully',
+        application: {
+          id: application.id,
+          status: application.status
+        }
+      });
+    } catch (error) {
+      console.error('Error withdrawing application:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to withdraw application'
+      });
+    }
+  }
+);
+
+// Get application statistics (optional)
+router.get('/stats',
+  logMiddleware('isLoggedIn', isLoggedIn),
+  async (req, res) => {
+    try {
+      const { JobApplication } = require('../models');
+      const job_seeker_id = req.user.id;
+
+      const stats = await JobApplication.findAll({
+        where: { job_seeker_id },
+        attributes: [
+          'status',
+          [JobApplication.sequelize.fn('COUNT', '*'), 'count']
+        ],
+        group: ['status'],
+        raw: true
+      });
+
+      // Transform to object format
+      const statsObj = {
+        total: 0,
+        applied: 0,
+        under_review: 0,
+        approved: 0,
+        rejected: 0,
+        withdrawn: 0
+      };
+
+      stats.forEach(stat => {
+        statsObj[stat.status] = parseInt(stat.count);
+        statsObj.total += parseInt(stat.count);
+      });
+
+      res.json({
+        success: true,
+        stats: statsObj
+      });
+    } catch (error) {
+      console.error('Error fetching application stats:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch application statistics'
+      });
+    }
+  }
+);
 
 module.exports = router;

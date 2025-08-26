@@ -27,7 +27,14 @@ status: {
   type: DataTypes.STRING(20),
   defaultValue: 'applied',
 },
-
+ ats_score: {                  // << new column
+      type: DataTypes.INTEGER,    // store score as integer (0-100)
+      allowNull: true,
+    },
+ats_feedback: {
+      type: DataTypes.TEXT,      // ✅ feedback text
+      allowNull: true
+    },
     applied_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,

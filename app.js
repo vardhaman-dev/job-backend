@@ -30,6 +30,10 @@ const companyRoutes = require('./routes/companyRoutes');
 const jobseekerRoutes = require('./routes/jobseeker.routes');
 const emailRoutes = require("./routes/emailRoutes");
 const notificationsRouter = require('./routes/notificationRoutes');
+const noteRoutes = require('./routes/noteRoutes');
+const recommendationRoutes = require('./routes/recommendations');
+const resumeBuilderRoutes = require('./routes/resumeBuilder'); 
+
 // Create Express app
 const app = express();
 
@@ -56,6 +60,9 @@ app.use('/api', companyRoutes);
 app.use('/api/jobseeker', jobseekerRoutes);
 app.use("/api/emails", emailRoutes);
 app.use('/api/notifications', notificationsRouter); 
+app.use('/api/notes', noteRoutes);
+app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/resume-builder', resumeBuilderRoutes);
 // Health check endpoint
 app.get('/', (_, res) => res.status(200).json({ status: 'ok', message: 'Job Portal API is running' }));
 
@@ -109,4 +116,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = app; // Export for testing
+module.exports = app;// Export for testing

@@ -10,7 +10,7 @@ const JobApplication = require('./JobApplication')(sequelize);
 const UserEducation = require('./UserEducation');
 const UserExperience = require('./UserExperience');
 const Notification = require("./Notification")(sequelize, DataTypes); // <-- add this
-
+const Note = require("./Note")(sequelize, DataTypes);
 // associations
 User.hasMany(Notification, { foreignKey: "user_id", as: "notifications" });
 Notification.belongsTo(User, { foreignKey: "user_id", as: "user" });
@@ -22,7 +22,13 @@ JobApplication.belongsTo(Job, { foreignKey: 'job_id', as: 'job' });
 
 User.hasMany(JobApplication, { foreignKey: 'job_seeker_id', as: 'jobApplications' });
 JobApplication.belongsTo(User, { foreignKey: 'job_seeker_id', as: 'jobSeeker' });
+// Job ↔ Note (one-to-many)
+Job.hasMany(Note, { foreignKey: "job_id", as: "notes" });
+Note.belongsTo(Job, { foreignKey: "job_id", as: "job" });
 
+// User ↔ Note (one-to-many)
+User.hasMany(Note, { foreignKey: "user_id", as: "notes" });
+Note.belongsTo(User, { foreignKey: "user_id", as: "applicant" });
  
 // Define associations
 // User to CompanyProfile (One-to-One)
@@ -118,5 +124,6 @@ module.exports = {
   UserEducation,
   UserExperience,
     Notification,
+    Note, 
 };
 

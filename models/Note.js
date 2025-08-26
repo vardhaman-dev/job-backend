@@ -10,7 +10,6 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       user_id: {
-        // assuming this is the applicant (job_seeker_id)
         type: DataTypes.INTEGER,
         allowNull: false,
       },
@@ -30,18 +29,22 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       tableName: "notes",
-      timestamps: false,
+      timestamps: false, // we already have created_at, but no updated_at
       underscored: true,
-      indexes: [
-        // fast lookup by (job_id, user_id)
-        { fields: ["job_id", "user_id"] },
-      ],
+      indexes: [{ fields: ["job_id", "user_id"] }],
     }
   );
 
+  // Associations
   Note.associate = (models) => {
-    Note.belongsTo(models.Job, { foreignKey: "job_id", as: "job" });
-    Note.belongsTo(models.User, { foreignKey: "user_id", as: "applicant" });
+    Note.belongsTo(models.Job, {
+      foreignKey: "job_id",
+      as: "job",
+    });
+    Note.belongsTo(models.User, {
+      foreignKey: "user_id",
+      as: "applicant", // applicant = job seeker
+    });
   };
 
   return Note;

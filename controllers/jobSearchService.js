@@ -13,22 +13,34 @@ async function searchJobsByQuery(query) {
   const normalizedQuery = normalizeText(query);
 
   // Fetch jobs that match the company name
-  const jobsByCompany = await Job.findAll({
-    attributes: ['id', 'title', 'tags', 'location', 'skills', 'salary_range', 'type', 'posted_at','experience_min'],
-    where: { status: 'open' },
-    include: [
-      {
-        model: CompanyProfile,
-        as: 'company',
-        attributes: ['company_name'],
-        where: {
-          status: 'approved',
-          company_name: { [Op.like]: `%${query}%` }
+ const jobsByCompany = await Job.findAll({
+  attributes: [
+    'id',
+    'title',
+    'tags',
+    'location',
+    'skills',
+    'salary_range',
+    'type',
+    'posted_at',
+    'experience_min'
+  ],
+  where: { status: 'open' },
+  include: [
+    {
+      model: CompanyProfile,
+      as: 'company',
+      attributes: ['company_name'],
+      where: {
+        status: {
+          [Op.or]: ['approved', 'pending']   // <-- allow both statuses
         },
-        required: true
-      }
-    ]
-  });
+        company_name: { [Op.like]: `%${query}%` }
+      },
+      required: true
+    }
+  ]
+});
 
   // Fetch all jobs (approved companies only)
   const allJobs = await Job.findAll({

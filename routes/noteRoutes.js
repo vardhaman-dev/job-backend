@@ -1,9 +1,10 @@
+// routes/note.routes.js
 const express = require("express");
-const { Note, JobApplication } = require("../models"); // <- import from index.js
+const { Note, JobApplication } = require("../models");
 
 const router = express.Router();
 
-// GET notes for a given job_id + user_id
+// GET notes for a job + user
 router.get("/:jobId/:userId", async (req, res) => {
   try {
     const jobId = parseInt(req.params.jobId, 10);
@@ -13,7 +14,6 @@ router.get("/:jobId/:userId", async (req, res) => {
       return res.status(400).json({ error: "Invalid jobId or userId" });
     }
 
-    // Optional: check if application exists
     const app = await JobApplication.findOne({
       where: { job_id: jobId, job_seeker_id: userId },
     });
@@ -45,12 +45,13 @@ router.post("/:jobId/:userId", async (req, res) => {
       return res.status(400).json({ error: "Note text is required" });
     }
 
-    // Check if application exists
     const app = await JobApplication.findOne({
       where: { job_id: jobId, job_seeker_id: userId },
     });
 
-    if (!app) return res.status(404).json({ error: "Application not found for this job/user" });
+    if (!app) {
+      return res.status(404).json({ error: "Application not found for this job/user" });
+    }
 
     const created = await Note.create({
       job_id: jobId,
