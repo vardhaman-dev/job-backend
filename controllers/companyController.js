@@ -69,3 +69,39 @@ exports.updateCompanyProfile = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
+exports.getEmployerStatus = async (req, res) => {
+  try {
+    console.log('--- getEmployerStatus called ---');
+
+    const user = req.user; // set by isLoggedIn middleware
+    console.log('[getEmployerStatus] req.user:', user);
+
+    if (!user) {
+      console.log('[getEmployerStatus] No user found in req.user');
+      return res.status(401).json({ status: 'unknown', rejectionReason: '' });
+    }
+
+    console.log('[getEmployerStatus] Searching for company profile with userId =', user.id);
+    const company = await CompanyProfile.findOne({
+      where: { userId: user.id }, // Sequelize maps to user_id
+      attributes: ['status', 'rejectionReason'] // Sequelize maps to rejection_reason
+    });
+
+    if (!company) {
+      console.log('[getEmployerStatus] No company found for userId =', user.id);
+      return res.status(404).json({ status: 'unknown', rejectionReason: '' });
+    }
+
+    console.log('[getEmployerStatus] Company found:', company.toJSON());
+
+    return res.json({
+      status: company.status,
+      rejectionReason: company.rejectionReason || ''
+    });
+  } catch (err) {
+    console.error('[getEmployerStatus] Error:', err);
+    return res.status(500).json({ status: 'unknown', rejectionReason: '' });
+  }
+};
+
+

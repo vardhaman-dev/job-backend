@@ -53,61 +53,203 @@ async function cleanupFile(bucket, path) {
   }
 }
 
-async function scoreResume(resume, job) {
-  // Check if API key is available
-  if (!OPENROUTER_API_KEY) {
-    console.warn("OPENROUTER_API_KEY not found, skipping AI scoring");
-    return { score: null, feedback: "AI scoring not configured" };
+// Configuration and Constants
+
+
+// Qualification levels hierarchy (lowest to highest)
+
+// Qualification aliases for normalization
+
+/**
+ * Normalize qualification strings to standard levels
+ * @param {string} input - Raw qualification string
+ * @returns {string|null} - Normalized qualification level or null if not recognized
+ */
+function normalizeQualification(input) {
+  if (!input) return null;
+  
+  const normalized = input.toString().trim().toLowerCase();
+  
+  for (const [level, aliases] of Object.entries(QUALIFICATION_ALIASES)) {
+    if (aliases.some(alias => normalized.includes(alias))) {
+      return level;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if user's qualification meets job requirements
+ * @param {string} jobQualification - Required qualification for job
+ * @param {string} userQualification - User's highest qualification
+ * @returns {Object} - Eligibility result with status and message
+ */
+function checkQualificationEligibility(jobQualification, userQualification) {
+  const jobLevel = normalizeQualification(jobQualification);
+  const userLevel = normalizeQualification(userQualification);
+
+  if (!jobLevel) {
+    console.warn(`Unknown job qualification: ${jobQualification}`);
+    return { eligible: true, message: 'Job qualification not recognized, proceeding with application' };
   }
 
-  const prompt = `You are an ATS AI system. Evaluate the candidate's resume against the job requirements. 
+  if (!userLevel) {
+    return { 
+      eligible: false, 
+      message: 'Your qualification is missing or not recognized' 
+    };
+  }
+
+  const jobIndex = QUALIFICATION_LEVELS.indexOf(jobLevel);
+  const userIndex = QUALIFICATION_LEVELS.indexOf(userLevel);
+
+  if (userIndex < jobIndex) {
+    return {
+      eligible: false,
+      message: `You are not eligible. Required: ${jobQualification}, but your highest qualification is ${userQualification}`
+    };
+  }
+
+  return { eligible: true, message: 'Qualification requirements met' };
+}
+
+/**
+ * Create ATS scoring prompt for AI evaluation
+ * @param {Object} job - Job details
+ * @returns {string} - Formatted prompt for AI scoring
+ */
+function createScoringPrompt(job) {
+  const skillsList = Array.isArray(job.skills) ? job.skills.join(', ') : (job.skills || 'Not specified');
+  const tagsList = Array.isArray(job.tags) ? job.tags.join(', ') : (job.tags || 'Not specified');
+
+  return `You are an ATS AI system. Evaluate the candidate's resume against the job requirements. 
 Score strictly from 0–100. 
 
 Use the following weighted criteria:
-- Skills match (40%)
-- Experience vs. minimum required (25%)
-- Education match (15%)
-- Job category & role relevance (10%)
-- Other details like projects, certifications, achievements (10%)
+- Skills match (${ATS_SCORING_WEIGHTS.skillsMatch}%)
+- Experience vs. minimum required (${ATS_SCORING_WEIGHTS.experience}%)
+- Education match (${ATS_SCORING_WEIGHTS.education}%)
+- Job category & role relevance (${ATS_SCORING_WEIGHTS.roleRelevance}%)
+- Other details like projects, certifications, achievements (${ATS_SCORING_WEIGHTS.otherDetails}%)
 
 ### Job Details:
 Title: ${job.title}
 Description: ${job.description}
-Location: ${job.location || "Not specified"}
+Location: ${job.location || 'Not specified'}
 Type: ${job.type}
-Salary Range: ${job.salary_range || "Not specified"}
-Education Requirement: ${job.education || "Not specified"}
+Salary Range: ${job.salary_range || 'Not specified'}
+Education Requirement: ${job.education || 'Not specified'}
 Minimum Experience: ${job.experience_min || 0} years
-Skills Required: ${Array.isArray(job.skills) ? job.skills.join(", ") : (job.skills || "Not specified")}
-Tags: ${Array.isArray(job.tags) ? job.tags.join(", ") : (job.tags || "Not specified")}
-Category: ${job.category || "Not specified"}
+Skills Required: ${skillsList}
+Tags: ${tagsList}
+Category: ${job.category || 'Not specified'}
 
 ### Candidate Resume:
-${resume}
+{{RESUME_TEXT}}
 
 Return JSON only in the following format:
 {
   "score": <number 0-100>,
   "feedback": "<short bullet points about strengths/weaknesses>"
 }`;
+}
+
+/**
+ * Parse AI response and extract JSON data
+ * @param {string} text - Raw AI response text
+ * @returns {Object} - Parsed score and feedback
+ */
+function parseAIResponse(text) {
+  let cleanText = text.trim();
+  
+  // Extract from markdown code blocks if present
+  const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (codeBlockMatch) {
+    cleanText = codeBlockMatch[1];
+  }
+  
+  // Extract JSON object from response
+  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+  const jsonText = jsonMatch ? jsonMatch[0] : cleanText;
+  
+  try {
+    const parsed = JSON.parse(jsonText);
+    
+    // Validate and normalize score
+    if (parsed.score !== null && typeof parsed.score === 'number') {
+      parsed.score = Math.min(100, Math.max(0, Math.round(parsed.score)));
+    } else if (parsed.score !== null) {
+      const scoreNum = parseInt(parsed.score);
+      parsed.score = isNaN(scoreNum) ? null : Math.min(100, Math.max(0, scoreNum));
+    }
+    
+    return {
+      score: parsed.score,
+      feedback: parsed.feedback || 'No feedback provided'
+    };
+    
+  } catch (error) {
+    console.warn('Failed to parse JSON, attempting manual extraction:', error.message);
+    return extractScoreManually(text);
+  }
+}
+
+/**
+ * Manually extract score and feedback when JSON parsing fails
+ * @param {string} text - Raw AI response text
+ * @returns {Object} - Extracted score and feedback
+ */
+function extractScoreManually(text) {
+  const scoreMatch = text.match(/(?:"score":\s*|score":\s*)(\d{1,3})/i);
+  const feedbackMatch = text.match(/(?:"feedback":\s*"|feedback":\s*")([^"]*(?:\\.[^"]*)*)/i);
+  
+  let score = null;
+  if (scoreMatch) {
+    score = Math.min(100, Math.max(0, parseInt(scoreMatch[1])));
+  } else {
+    // Fallback to any number in the text
+    const anyNumberMatch = text.match(/\b(\d{1,3})\b/);
+    score = anyNumberMatch ? Math.min(100, Math.max(0, parseInt(anyNumberMatch[1]))) : null;
+  }
+  
+  let feedback = text;
+  if (feedbackMatch) {
+    feedback = feedbackMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+  }
+  
+  return { score, feedback };
+}
+
+/**
+ * Score resume using AI-based ATS system
+ * @param {string} resumeText - Combined text from resume and cover letter
+ * @param {Object} job - Job details for comparison
+ * @returns {Promise<Object>} - Score and feedback from AI evaluation
+ */
+async function scoreResume(resumeText, job) {
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.warn('OPENROUTER_API_KEY not found, skipping AI scoring');
+    return { 
+      score: null, 
+      feedback: 'AI scoring not configured' 
+    };
+  }
+
+  const prompt = createScoringPrompt(job).replace('{{RESUME_TEXT}}', resumeText);
 
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
+    const response = await fetch(OPENROUTER_CONFIG.baseUrl, {
+      method: 'POST',
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "mistralai/mistral-7b-instruct",
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        max_tokens: 300,
-        temperature: 0.3,
+        model: OPENROUTER_CONFIG.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: OPENROUTER_CONFIG.maxTokens,
+        temperature: OPENROUTER_CONFIG.temperature,
       }),
     });
 
@@ -117,84 +259,380 @@ Return JSON only in the following format:
     }
 
     const data = await response.json();
-    const text = data.choices?.[0]?.message?.content?.trim() || "";
-
-    // Try parsing JSON
-    let parsed = {};
-    try {
-      // Clean the text first - remove extra whitespace and newlines
-      let cleanText = text.trim();
-      console.log("message:",cleanText);
-      
-      // If the response is wrapped in markdown code blocks, extract it
-      const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (codeBlockMatch) {
-        cleanText = codeBlockMatch[1];
-      }
-      
-      // Extract JSON from the response if it's wrapped in other text
-      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-      const jsonText = jsonMatch ? jsonMatch[0] : cleanText;
-      
-      console.log('Attempting to parse JSON:', jsonText);
-      parsed = JSON.parse(jsonText);
-      
-    } catch (e) {
-      console.warn("AI did not return valid JSON, attempting manual extraction:", e.message);
-      console.log("Original response text:", text);
-      
-      // Try to extract score and feedback manually
-      const scoreMatch = text.match(/(?:"score":\s*|score":\s*)(\d{1,3})/i);
-      const feedbackMatch = text.match(/(?:"feedback":\s*"|feedback":\s*")([^"]*(?:\\.[^"]*)*)/i);
-      
-      if (scoreMatch) {
-        parsed.score = Math.min(100, Math.max(0, parseInt(scoreMatch[1])));
-      } else {
-        // Fallback to any number in the text
-        const anyNumberMatch = text.match(/\b(\d{1,3})\b/);
-        parsed.score = anyNumberMatch ? Math.min(100, Math.max(0, parseInt(anyNumberMatch[1]))) : null;
-      }
-      
-      if (feedbackMatch) {
-        // Unescape the feedback string
-        parsed.feedback = feedbackMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-      } else {
-        parsed.feedback = text;
-      }
+    const aiResponse = data.choices?.[0]?.message?.content?.trim();
+    
+    if (!aiResponse) {
+      throw new Error('No response from AI service');
     }
 
-    // Validate and ensure score is a number
+    console.log('AI Response:', aiResponse);
+    const result = parseAIResponse(aiResponse);
+    console.log('Parsed result:', { score: result.score, feedbackLength: result.feedback?.length });
+    
+    return result;
+
+  } catch (error) {
+    console.error('Error scoring resume:', error.message);
+    return { 
+      score: null, 
+      feedback: 'Scoring failed due to technical error' 
+    };
+  }
+}
+
+/**
+ * Upload file to Supabase storage
+ * @param {Object} file - File object from multer
+ * @param {string} bucket - Storage bucket name
+ * @param {string} filePath - Path for file in storage
+ * @returns {Promise<string>} - Public URL of uploaded file
+ */
+async function uploadFile(file, bucket, filePath) {
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file.buffer, {
+      contentType: file.mimetype,
+      upsert: true
+    });
+
+  if (error) {
+    throw new Error(`File upload failed: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+/**
+ * Main controller function to handle job applications
+ */
+// Configuration and Constants
+const OPENROUTER_CONFIG = {
+  baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+  model: 'mistralai/mistral-7b-instruct',
+  maxTokens: 300,
+  temperature: 0.3
+};
+
+const ATS_SCORING_WEIGHTS = {
+  skillsMatch: 40,
+  experience: 25,
+  education: 15,
+  roleRelevance: 10,
+  otherDetails: 10
+};
+
+// Qualification levels hierarchy (lowest to highest)
+const QUALIFICATION_LEVELS = [
+  'high_school',
+  'diploma', 
+  'associate',
+  'bachelors',
+  'masters',
+  'phd'
+];
+
+// Qualification aliases for normalization
+const QUALIFICATION_ALIASES = {
+  high_school: ['high school', 'secondary', 'ssc', '10th', 'matric', 'hssc', '12th', 'intermediate', 'junior college'],
+  diploma: ['diploma', 'polytechnic'],
+  associate: ['associate', 'associate degree'],
+  bachelors: ['bachelor', 'bachelors', 'undergraduate', 'grad', 'college degree', 'btech', 'b.sc', 'bcom', 'ba'],
+  masters: ['master', 'masters', 'postgraduate', 'm.sc', 'mba', 'ma', 'mtech'],
+  phd: ['phd', 'doctorate', 'doctoral', 'dphil']
+};
+
+/**
+ * Normalize qualification strings to standard levels
+ * @param {string} input - Raw qualification string
+ * @returns {string|null} - Normalized qualification level or null if not recognized
+ */
+function normalizeQualification(input) {
+  if (!input) return null;
+  
+  const normalized = input.toString().trim().toLowerCase();
+  
+  for (const [level, aliases] of Object.entries(QUALIFICATION_ALIASES)) {
+    if (aliases.some(alias => normalized.includes(alias))) {
+      return level;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if user's qualification meets job requirements
+ * User is eligible if they have the SAME or HIGHER qualification than required
+ * @param {string} jobQualification - Required qualification for job
+ * @param {Array} userEducationRecords - Array of user's education records
+ * @returns {Object} - Eligibility result with status and message
+ */
+function checkQualificationEligibility(jobQualification, userEducationRecords) {
+  const jobLevel = normalizeQualification(jobQualification);
+  
+  if (!jobLevel) {
+    console.warn(`Unknown job qualification: ${jobQualification}`);
+    return { 
+      eligible: true, 
+      message: 'Job qualification not recognized, proceeding with application' 
+    };
+  }
+
+  if (!userEducationRecords || userEducationRecords.length === 0) {
+    return { 
+      eligible: false, 
+      message: 'No education records found. Please add your qualifications to apply.' 
+    };
+  }
+
+  // Get all user qualification levels
+  const userQualificationLevels = userEducationRecords
+    .map(edu => normalizeQualification(edu.qualification))
+    .filter(level => level !== null); // Remove unrecognized qualifications
+
+  if (userQualificationLevels.length === 0) {
+    return {
+      eligible: false,
+      message: 'None of your qualifications are recognized. Please update your education details.'
+    };
+  }
+
+  // Find the highest qualification level the user has
+  const userHighestLevelIndex = Math.max(
+    ...userQualificationLevels.map(level => QUALIFICATION_LEVELS.indexOf(level))
+  );
+  
+  const jobRequiredIndex = QUALIFICATION_LEVELS.indexOf(jobLevel);
+
+  // User is eligible if their highest qualification is >= job requirement
+  if (userHighestLevelIndex >= jobRequiredIndex) {
+    const userHighestLevel = QUALIFICATION_LEVELS[userHighestLevelIndex];
+    const userHighestQualification = userEducationRecords.find(
+      edu => normalizeQualification(edu.qualification) === userHighestLevel
+    )?.qualification;
+
+    return { 
+      eligible: true, 
+      message: `Qualification requirements met. Your highest qualification: ${userHighestQualification}, Required: ${jobQualification}` 
+    };
+  } else {
+    // User is not eligible - their highest qualification is below requirement
+    const userHighestLevel = QUALIFICATION_LEVELS[userHighestLevelIndex];
+    const userHighestQualification = userEducationRecords.find(
+      edu => normalizeQualification(edu.qualification) === userHighestLevel
+    )?.qualification;
+
+    return {
+      eligible: false,
+      message: `You are not eligible. Required: ${jobQualification}, but your highest qualification is: ${userHighestQualification}`
+    };
+  }
+}
+
+/**
+ * Create ATS scoring prompt for AI evaluation
+ * @param {Object} job - Job details
+ * @returns {string} - Formatted prompt for AI scoring
+ */
+function createScoringPrompt(job) {
+  const skillsList = Array.isArray(job.skills) ? job.skills.join(', ') : (job.skills || 'Not specified');
+  const tagsList = Array.isArray(job.tags) ? job.tags.join(', ') : (job.tags || 'Not specified');
+
+  return `You are an ATS AI system. Evaluate the candidate's resume against the job requirements. 
+Score strictly from 0–100. 
+
+Use the following weighted criteria:
+- Skills match (${ATS_SCORING_WEIGHTS.skillsMatch}%)
+- Experience vs. minimum required (${ATS_SCORING_WEIGHTS.experience}%)
+- Education match (${ATS_SCORING_WEIGHTS.education}%)
+- Job category & role relevance (${ATS_SCORING_WEIGHTS.roleRelevance}%)
+- Other details like projects, certifications, achievements (${ATS_SCORING_WEIGHTS.otherDetails}%)
+
+### Job Details:
+Title: ${job.title}
+Description: ${job.description}
+Location: ${job.location || 'Not specified'}
+Type: ${job.type}
+Salary Range: ${job.salary_range || 'Not specified'}
+Education Requirement: ${job.education || 'Not specified'}
+Minimum Experience: ${job.experience_min || 0} years
+Skills Required: ${skillsList}
+Tags: ${tagsList}
+Category: ${job.category || 'Not specified'}
+
+### Candidate Resume:
+{{RESUME_TEXT}}
+
+Return JSON only in the following format:
+{
+  "score": <number 0-100>,
+  "feedback": "<short bullet points about strengths/weaknesses>"
+}`;
+}
+
+/**
+ * Parse AI response and extract JSON data
+ * @param {string} text - Raw AI response text
+ * @returns {Object} - Parsed score and feedback
+ */
+function parseAIResponse(text) {
+  let cleanText = text.trim();
+  
+  // Extract from markdown code blocks if present
+  const codeBlockMatch = cleanText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (codeBlockMatch) {
+    cleanText = codeBlockMatch[1];
+  }
+  
+  // Extract JSON object from response
+  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+  const jsonText = jsonMatch ? jsonMatch[0] : cleanText;
+  
+  try {
+    const parsed = JSON.parse(jsonText);
+    
+    // Validate and normalize score
     if (parsed.score !== null && typeof parsed.score === 'number') {
       parsed.score = Math.min(100, Math.max(0, Math.round(parsed.score)));
     } else if (parsed.score !== null) {
-      // Try to convert string to number
       const scoreNum = parseInt(parsed.score);
       parsed.score = isNaN(scoreNum) ? null : Math.min(100, Math.max(0, scoreNum));
     }
     
-    console.log('Parsed result:', { score: parsed.score, feedbackLength: parsed.feedback?.length });
-
-    return parsed;
-  } catch (err) {
-    console.error("Error scoring resume:", err.message);
-    return { score: null, feedback: "Scoring failed due to technical error" };
+    return {
+      score: parsed.score,
+      feedback: parsed.feedback || 'No feedback provided'
+    };
+    
+  } catch (error) {
+    console.warn('Failed to parse JSON, attempting manual extraction:', error.message);
+    return extractScoreManually(text);
   }
 }
 
-// Apply to a job
+/**
+ * Manually extract score and feedback when JSON parsing fails
+ * @param {string} text - Raw AI response text
+ * @returns {Object} - Extracted score and feedback
+ */
+function extractScoreManually(text) {
+  const scoreMatch = text.match(/(?:"score":\s*|score":\s*)(\d{1,3})/i);
+  const feedbackMatch = text.match(/(?:"feedback":\s*"|feedback":\s*")([^"]*(?:\\.[^"]*)*)/i);
+  
+  let score = null;
+  if (scoreMatch) {
+    score = Math.min(100, Math.max(0, parseInt(scoreMatch[1])));
+  } else {
+    // Fallback to any number in the text
+    const anyNumberMatch = text.match(/\b(\d{1,3})\b/);
+    score = anyNumberMatch ? Math.min(100, Math.max(0, parseInt(anyNumberMatch[1]))) : null;
+  }
+  
+  let feedback = text;
+  if (feedbackMatch) {
+    feedback = feedbackMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+  }
+  
+  return { score, feedback };
+}
+
+/**
+ * Score resume using AI-based ATS system
+ * @param {string} resumeText - Combined text from resume and cover letter
+ * @param {Object} job - Job details for comparison
+ * @returns {Promise<Object>} - Score and feedback from AI evaluation
+ */
+async function scoreResume(resumeText, job) {
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.warn('OPENROUTER_API_KEY not found, skipping AI scoring');
+    return { 
+      score: null, 
+      feedback: 'AI scoring not configured' 
+    };
+  }
+
+  const prompt = createScoringPrompt(job).replace('{{RESUME_TEXT}}', resumeText);
+
+  try {
+    const response = await fetch(OPENROUTER_CONFIG.baseUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_CONFIG.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: OPENROUTER_CONFIG.maxTokens,
+        temperature: OPENROUTER_CONFIG.temperature,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const aiResponse = data.choices?.[0]?.message?.content?.trim();
+    
+    if (!aiResponse) {
+      throw new Error('No response from AI service');
+    }
+
+    console.log('AI Response:', aiResponse);
+    const result = parseAIResponse(aiResponse);
+    console.log('Parsed result:', { score: result.score, feedbackLength: result.feedback?.length });
+    
+    return result;
+
+  } catch (error) {
+    console.error('Error scoring resume:', error.message);
+    return { 
+      score: null, 
+      feedback: 'Scoring failed due to technical error' 
+    };
+  }
+}
+
+/**
+ * Upload file to Supabase storage
+ * @param {Object} file - File object from multer
+ * @param {string} bucket - Storage bucket name
+ * @param {string} filePath - Path for file in storage
+ * @returns {Promise<string>} - Public URL of uploaded file
+ */
+async function uploadFile(file, bucket, filePath) {
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file.buffer, {
+      contentType: file.mimetype,
+      upsert: true
+    });
+
+  if (error) {
+    throw new Error(`File upload failed: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+/**
+ * Main controller function to handle job applications
+ */
 exports.applyToJob = async (req, res) => {
   let transaction;
   let resumePath = null;
   let coverPath = null;
 
   try {
-    // Start transaction
     transaction = await JobApplication.sequelize.transaction();
-
     const { job_id } = req.body;
     const job_seeker_id = req.user.id;
 
-    // Validate job_id format
+    // Validate job ID
     if (!job_id || isNaN(parseInt(job_id))) {
       await transaction.rollback();
       return res.status(400).json({ 
@@ -206,10 +644,10 @@ exports.applyToJob = async (req, res) => {
     const resumeFile = req.files?.resume?.[0];
     const coverLetterFile = req.files?.coverLetter?.[0];
 
-    // Validate files
+    // Validate uploaded files
     const resumeValidation = validateFile(resumeFile, 'Resume');
     const coverValidation = validateFile(coverLetterFile, 'Cover Letter');
-
+    
     if (!resumeValidation.valid) {
       await transaction.rollback();
       return res.status(400).json({ 
@@ -217,7 +655,7 @@ exports.applyToJob = async (req, res) => {
         message: resumeValidation.message 
       });
     }
-
+    
     if (!coverValidation.valid) {
       await transaction.rollback();
       return res.status(400).json({ 
@@ -226,7 +664,6 @@ exports.applyToJob = async (req, res) => {
       });
     }
 
-    // Check if at least one file is provided
     if (!resumeFile && !coverLetterFile) {
       await transaction.rollback();
       return res.status(400).json({ 
@@ -235,7 +672,7 @@ exports.applyToJob = async (req, res) => {
       });
     }
 
-    // Check job exists
+    // Check if job exists
     const job = await Job.findByPk(job_id);
     if (!job) {
       await transaction.rollback();
@@ -245,13 +682,77 @@ exports.applyToJob = async (req, res) => {
       });
     }
 
-    // Prevent duplicate application
-    const existing = await JobApplication.findOne({ 
+    // Check qualification eligibility
+   if (job.education) {
+  // Fetch all education records for the user
+  const userEducationRecords = await UserEducation.findAll({
+    where: { user_id: job_seeker_id },
+    order: [['id', 'DESC']]
+  });
+
+  // If user has no education records
+  if (!userEducationRecords || userEducationRecords.length === 0) {
+    await transaction.rollback();
+    return res.status(403).json({
+      success: false,
+      message: 'No education records found. Please add your qualifications to apply.'
+    });
+  }
+
+  // Normalize job requirement
+  const jobLevel = normalizeQualification(job.education);
+
+  if (!jobLevel) {
+    console.warn(`Unknown job qualification requirement: ${job.education}`);
+    // Proceed if job requirement is not recognized
+  } else {
+    // Normalize all user degrees
+    const userLevels = userEducationRecords
+      .map(edu => normalizeQualification(edu.degree))
+      .filter(lvl => lvl !== null); // remove unrecognized degrees
+
+    if (userLevels.length === 0) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'None of your qualifications are recognized. Please update your education details.'
+      });
+    }
+
+    // Find highest user level
+    const userHighestIndex = Math.max(...userLevels.map(lvl => QUALIFICATION_LEVELS.indexOf(lvl)));
+    const jobRequiredIndex = QUALIFICATION_LEVELS.indexOf(jobLevel);
+
+    // Cross-validation
+    if (userHighestIndex < jobRequiredIndex) {
+      const userHighest = userEducationRecords.find(
+        edu => normalizeQualification(edu.degree) === QUALIFICATION_LEVELS[userHighestIndex]
+      )?.degree;
+
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: `You are not eligible. Required: ${job.education}, but your highest qualification is: ${userHighest}`
+      });
+    }
+
+    console.log('Qualification check passed:', {
+      required: job.education,
+      userHighest: userEducationRecords.find(
+        edu => normalizeQualification(edu.degree) === QUALIFICATION_LEVELS[userHighestIndex]
+      )?.degree
+    });
+  }
+}
+
+
+    // Check for duplicate applications
+    const existingApplication = await JobApplication.findOne({
       where: { job_id: parseInt(job_id), job_seeker_id },
-      transaction 
+      transaction
     });
     
-    if (existing) {
+    if (existingApplication) {
       await transaction.rollback();
       return res.status(400).json({ 
         success: false, 
@@ -259,136 +760,95 @@ exports.applyToJob = async (req, res) => {
       });
     }
 
-    // Upload files in parallel
-    const uploadPromises = [];
+    // Upload files to storage
     let resume_link = null;
     let cover_letter_link = null;
 
-    // Upload resume if present
     if (resumeFile) {
       resumePath = `user_${job_seeker_id}_job_${job_id}/${Date.now()}_${sanitizeName(resumeFile.originalname)}`;
-      uploadPromises.push(
-        supabase.storage
-          .from(BUCKET_RESUMES)
-          .upload(resumePath, resumeFile.buffer, {
-            contentType: resumeFile.mimetype,
-            upsert: true
-          })
-          .then(({ error }) => {
-            if (error) throw new Error(`Resume upload failed: ${error.message}`);
-            const { data } = supabase.storage.from(BUCKET_RESUMES).getPublicUrl(resumePath);
-            resume_link = data.publicUrl;
-          })
-      );
+      resume_link = await uploadFile(resumeFile, process.env.BUCKET_RESUMES, resumePath);
     }
 
-    // Upload cover letter if present
     if (coverLetterFile) {
       coverPath = `user_${job_seeker_id}_job_${job_id}/${Date.now()}_${sanitizeName(coverLetterFile.originalname)}`;
-      uploadPromises.push(
-        supabase.storage
-          .from(BUCKET_COVERLETTERS)
-          .upload(coverPath, coverLetterFile.buffer, {
-            contentType: coverLetterFile.mimetype,
-            upsert: true
-          })
-          .then(({ error }) => {
-            if (error) throw new Error(`Cover letter upload failed: ${error.message}`);
-            const { data } = supabase.storage.from(BUCKET_COVERLETTERS).getPublicUrl(coverPath);
-            cover_letter_link = data.publicUrl;
-          })
-      );
+      cover_letter_link = await uploadFile(coverLetterFile, process.env.BUCKET_COVERLETTERS, coverPath);
     }
 
-    // Wait for all uploads to complete
-    await Promise.all(uploadPromises);
-
-    // Extract text & run ATS scoring
-    let score = null;
-    let feedback = null;
-
+    // Perform ATS scoring
+    let atsScore = null;
+    let atsFeedback = null;
+    
     try {
       let combinedText = '';
+      
       if (resumeFile) {
         combinedText += await extractTextFromFile(resumeFile);
       }
+      
       if (coverLetterFile) {
         combinedText += `\n\nCover Letter:\n${await extractTextFromFile(coverLetterFile)}`;
       }
       
       if (combinedText.trim()) {
-        console.log('Starting ATS scoring...');
-        const result = await scoreResume(combinedText, job);
-        console.log('ATS scoring result:', result);
-        
-        score = result.score;
-        feedback = result.feedback;
-        
-        // Ensure score is properly set
-        if (score !== null && !isNaN(score)) {
-          console.log('Score successfully extracted:', score);
-        } else {
-          console.warn('Score extraction failed, result:', result);
-        }
+        const scoringResult = await scoreResume(combinedText, job);
+        atsScore = scoringResult.score;
+        atsFeedback = scoringResult.feedback;
       }
     } catch (scoringError) {
       console.error('ATS scoring failed:', scoringError.message);
-      // Continue without score - don't fail the entire application
-      feedback = "ATS scoring temporarily unavailable";
+      atsFeedback = 'ATS scoring temporarily unavailable';
     }
 
-    // Save application record
+    // Create job application record
     const application = await JobApplication.create({
       job_id: parseInt(job_id),
       job_seeker_id,
       cover_letter: cover_letter_link,
       resume_link,
-      ats_score: score,          // ✅ mapped correctly
-  ats_feedback: feedback,    
+      ats_score: atsScore,
+      ats_feedback: atsFeedback,
       status: 'applied',
       applied_at: new Date()
     }, { transaction });
 
     await transaction.commit();
 
-    res.status(201).json({ 
-      success: true, 
+    // Return success response
+    res.status(201).json({
+      success: true,
       application: {
         id: application.id,
         job_id: application.job_id,
         status: application.status,
         ats_score: application.ats_score,
-    ats_feedback: application.ats_feedback,
+        ats_feedback: application.ats_feedback,
         applied_at: application.applied_at,
         resume_link: application.resume_link,
         cover_letter: application.cover_letter
-      },
-      feedback 
+      }
     });
 
-  } catch (err) {
-    console.error('Apply controller error:', err);
+  } catch (error) {
+    console.error('Apply controller error:', error);
     
-    // Rollback transaction if it exists
     if (transaction) {
       await transaction.rollback();
     }
-
+    
     // Cleanup uploaded files on error
     if (resumePath) {
-      await cleanupFile(BUCKET_RESUMES, resumePath);
+      await cleanupFile(process.env.BUCKET_RESUMES, resumePath);
     }
     if (coverPath) {
-      await cleanupFile(BUCKET_COVERLETTERS, coverPath);
+      await cleanupFile(process.env.BUCKET_COVERLETTERS, coverPath);
     }
 
-    res.status(500).json({ 
-      success: false, 
-      message: err.message || 'Failed to apply to job' 
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to apply to job'
     });
   }
 };
-
 // Get all applications for the logged-in job seeker
 exports.getMyApplications = async (req, res) => {
   try {

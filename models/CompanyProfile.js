@@ -23,6 +23,16 @@ const CompanyProfile = sequelize.define('CompanyProfile', {
     allowNull: true,
     field: 'contact_number',
   },
+  status: {
+  type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+  allowNull: false,
+  defaultValue: 'pending'
+},
+rejectionReason: {
+  type: DataTypes.TEXT,
+  allowNull: true,
+  field: 'rejection_reason'
+},
   logo: {
     type: DataTypes.STRING(512),
     allowNull: true,

@@ -37,10 +37,13 @@ const resumeBuilderRoutes = require('./routes/resumeBuilder');
 // Create Express app
 const app = express();
 
-// Middleware
-app.use(cors({
+// Middlewar
 
-}))
+app.use(cors({
+  origin: ['http://localhost:9000', 'http://localhost:9001'],  // allow your frontend origin
+  credentials: true                 // allow cookies/credentials
+}));
+
 app.use(helmet());
 app.use(express.json());
 

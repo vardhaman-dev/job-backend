@@ -78,28 +78,23 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ✅ Mark notification as read
-// PUT /:id/read
-// Returns: Updated Notification object
+
 router.put("/:id/read", async (req, res) => {
   try {
     const notification = await Notification.findByPk(req.params.id);
     if (!notification) {
       return res.status(404).json({ error: "Notification not found" });
     }
-    notification.read = true;
+    notification.seen = true;
     await notification.save();
     res.json({ success: true, notification });
   } catch (err) {
-    console.error("Error marking notification as read:", err);
-    res.status(500).json({ error: "Failed to mark notification as read", details: err.message });
+    console.error("Error marking notification as seen:", err);
+    res.status(500).json({ error: "Failed to mark notification as seen", details: err.message });
   }
 });
 
-// ✅ Mark multiple notifications as read
-// PUT /bulk-read
-// Body: { ids: Array }
-// Returns: { success: Boolean }
+// Mark multiple notifications as seen
 router.put("/bulk-read", async (req, res) => {
   try {
     const { ids } = req.body;
@@ -108,13 +103,14 @@ router.put("/bulk-read", async (req, res) => {
     }
 
     await Notification.update(
-      { read: true },
+      { seen: true },
       { where: { id: { [Op.in]: ids } } }
     );
+
     res.json({ success: true });
   } catch (err) {
-    console.error("Error marking notifications as read:", err);
-    res.status(500).json({ error: "Failed to mark notifications as read", details: err.message });
+    console.error("Error marking notifications as seen:", err);
+    res.status(500).json({ error: "Failed to mark notifications as seen", details: err.message });
   }
 });
 
