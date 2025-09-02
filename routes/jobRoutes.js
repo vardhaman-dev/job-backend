@@ -273,5 +273,41 @@ router.get('/jobs/trends/:companyId', async (req, res) => {
   }
 });
 
+// GET /jobs → Get all jobs (with optional pagination)
+router.get('/', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    const jobs = await Job.findAll({
+      include: [{
+        model: CompanyProfile,
+        as: 'company',
+        attributes: ['company_name', 'company_logo']
+      }],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
+    });
+
+    const totalJobs = await Job.count();
+
+    res.json({
+      success: true,
+      jobs,
+      pagination: {
+        total: totalJobs,
+        page,
+        limit,
+        totalPages: Math.ceil(totalJobs / limit)
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching all jobs:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch jobs.' });
+  }
+});
+
 router.get("/location", searchByLocation);
 module.exports = router;
