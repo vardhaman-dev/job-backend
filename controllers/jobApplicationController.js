@@ -1,4 +1,4 @@
-const { JobApplication, Job, User, JobSeekerProfile,UserEducation,UserExperience } = require('../models');
+const { JobApplication, Job, User, JobSeekerProfile,UserEducation,UserExperience, sequelize } = require('../models');
 // For Node.js versions 18+, fetch is built-in. For older versions, use node-fetch
 const fetch = globalThis.fetch || require("node-fetch");
 const { createClient } = require('@supabase/supabase-js');
@@ -1019,5 +1019,76 @@ exports.updateApplicationStatus = async (req, res) => {
       message: 'Error updating status', 
       details: err.message 
     });
+  }
+};
+exports.getApplicationAnalytics = async (req, res) => {
+  try {
+    const jobSeekerId = req.user.id;
+
+    // Aggregate counts by date and status for the last 7 days (including today)
+    const [rows] = await sequelize.query(
+      `
+      SELECT DATE(applied_at) AS day, status, COUNT(*) AS count
+      FROM applications
+      WHERE job_seeker_id = :jobSeekerId
+        AND applied_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+      GROUP BY DATE(applied_at), status
+      ORDER BY day ASC
+      `,
+      { replacements: { jobSeekerId } }
+    );
+
+    // Normalize SQL DATE value to 'YYYY-MM-DD' and build a map for quick lookup
+    const toYmd = (value) => {
+      if (!value) return '';
+      if (value instanceof Date) return value.toISOString().slice(0, 10);
+      // Fallback for string or other formats like 'YYYY-MM-DDT00:00:00.000Z' or 'YYYY-MM-DD'
+      const str = String(value);
+      return str.slice(0, 10);
+    };
+
+    const countsMap = new Map(); // key: `${day}|${status}` -> count
+    rows.forEach(r => {
+      const keyDay = toYmd(r.day);
+      countsMap.set(`${keyDay}|${r.status}`, Number(r.count));
+    });
+
+    // Prepare last 7 days labels (YYYY-MM-DD)
+    const days = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      days.push(`${yyyy}-${mm}-${dd}`);
+    }
+
+    const statuses = ['applied', 'approved', 'rejected'];
+    const series = {
+      applied: [],
+      approved: [],
+      rejected: []
+    };
+
+    days.forEach(day => {
+      statuses.forEach(status => {
+        const key = `${day}|${status}`;
+        const val = countsMap.get(key) || 0;
+        series[status].push(val);
+      });
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        days, // 'YYYY-MM-DD'
+        series
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch analytics' });
   }
 };

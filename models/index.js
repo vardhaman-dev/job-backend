@@ -11,6 +11,11 @@ const UserEducation = require('./UserEducation');
 const UserExperience = require('./UserExperience');
 const Notification = require("./Notification")(sequelize, DataTypes); // <-- add this
 const Note = require("./Note")(sequelize, DataTypes);
+const CompanyVerification = require('./CompanyVerification')(sequelize, DataTypes);
+const CompanyReview = require('./CompanyReview')(sequelize, DataTypes);
+const Report = require('./Report')(sequelize, DataTypes);
+const ReportCounter = require('./ReportCounter')(sequelize, DataTypes);
+
 // associations
 User.hasMany(Notification, { foreignKey: "user_id", as: "notifications" });
 Notification.belongsTo(User, { foreignKey: "user_id", as: "user" });
@@ -125,5 +130,9 @@ module.exports = {
   UserExperience,
     Notification,
     Note, 
+    CompanyVerification,
+  CompanyReview,
+  Report,
+  ReportCounter
 };
 

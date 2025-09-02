@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const companyController = require('../controllers/companyController');
-const { isLoggedIn } = require('../middleware/authMiddleware');
+const { isLoggedIn,protect } = require('../middleware/authMiddleware');
 const CompanyProfile = require('../models/CompanyProfile');
 const { createClient } = require('@supabase/supabase-js');
 const multer = require('multer');
@@ -56,6 +56,10 @@ router.post('/companies/photo/:userId', upload.single('photo'), async (req, res)
     res.status(500).json({ error: err.message });
   }
 });
+router.post('/company/report/:companyId', protect, companyController.reportCompany);
+
+// Get company status for dashboard
+router.get('/company/:companyId/status', protect, companyController.getCompanyStats);
 
 
 module.exports = router;

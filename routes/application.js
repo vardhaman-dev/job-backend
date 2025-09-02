@@ -9,7 +9,8 @@ const {
   applyToJob, 
   getMyApplications, 
   getCompanyCandidates,
-  updateApplicationStatus
+  updateApplicationStatus,
+  getApplicationAnalytics
 } = require('../controllers/jobApplicationController');
 
 // Add logging wrapper around middleware to detect hangs
@@ -287,5 +288,6 @@ router.get('/stats',
     }
   }
 );
+router.get('/analytics/last-7-days', isLoggedIn, getApplicationAnalytics);
 
 module.exports = router;
